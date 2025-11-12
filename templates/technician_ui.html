@@ -1,0 +1,95 @@
+<!-- technician_ui.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>Technician Station</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 p-4">
+    <div id="screen" class="max-w-md mx-auto bg-white rounded-xl shadow-md p-6">
+        <!-- Idle State -->
+        <div id="idle-screen" class="text-center">
+            <h2 class="text-xl font-bold mb-4">Smart Tool Station</h2>
+            <p class="text-gray-600">Please tap your NFC ID card to begin.</p>
+            <div class="mt-6 w-16 h-16 mx-auto rounded-full bg-blue-100 flex items-center justify-center">
+                <span class="text-2xl">📡</span>
+            </div>
+        </div>
+
+        <!-- Authenticated State -->
+        <div id="auth-screen" class="hidden">
+            <h2 class="text-lg font-semibold mb-2">Welcome, <span id="user-name">John</span>!</h2>
+            <p class="text-sm text-gray-500 mb-4">Select a tool to check out:</p>
+            <div id="tool-grid" class="grid grid-cols-2 gap-3 mb-4">
+                <!-- Tools will appear here -->
+            </div>
+            <button id="logout-btn" class="text-sm text-red-600 hover:underline">Log Out</button>
+        </div>
+    </div>
+
+    <script>
+        let currentUser = null;
+
+        async function loadAvailableTools() {
+            const res = await fetch('/api/tools/available');
+            const tools = await res.json();
+            const grid = document.getElementById('tool-grid');
+            grid.innerHTML = '';
+            tools.forEach(tool => {
+                const toolEl = document.createElement('div');
+                toolEl.className = 'border rounded p-3 text-center cursor-pointer hover:bg-gray-100';
+                toolEl.innerHTML = `
+                    <div class="font-mono text-sm">${tool.id}</div>
+                    <div class="font-medium">${tool.name}</div>
+                    <div class="text-xs text-gray-500 mt-1">Due: ${tool.calibration_due}</div>
+                `;
+                toolEl.onclick = () => confirmCheckout(tool);
+                grid.appendChild(toolEl);
+            });
+        }
+
+        async function confirmCheckout(tool) {
+            if (!confirm(`Check out ${tool.name} (${tool.id})?`)) return;
+            const response = await fetch('/api/checkout', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ user_id: currentUser.id, tool_id: tool.id })
+            });
+            const result = await response.json();
+            if (response.ok) {
+                alert('✅ Checkout approved! Box is unlocking...');
+                // In real system: Pi would unlock here
+            } else {
+                alert('❌ ' + result.message);
+            }
+        }
+
+        // Simulate NFC scan (for testing without hardware)
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'u') { // Press 'u' to simulate valid user
+                simulateUserAuth('USR-002');
+            }
+        });
+
+        async function simulateUserAuth(userId) {
+            const res = await fetch(`/api/users/${userId}`);
+            if (res.ok) {
+                currentUser = await res.json();
+                document.getElementById('user-name').textContent = currentUser.name;
+                document.getElementById('idle-screen').classList.add('hidden');
+                document.getElementById('auth-screen').classList.remove('hidden');
+                loadAvailableTools();
+            } else {
+                alert('Invalid user ID.');
+            }
+        }
+
+        document.getElementById('logout-btn').onclick = () => {
+            currentUser = null;
+            document.getElementById('auth-screen').classList.add('hidden');
+            document.getElementById('idle-screen').classList.remove('hidden');
+        };
+    </script>
+</body>
+</html>
