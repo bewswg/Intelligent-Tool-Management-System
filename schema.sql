@@ -17,7 +17,8 @@ CREATE TABLE tools (
 CREATE TABLE users (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
-    role TEXT NOT NULL
+    role TEXT NOT NULL,
+    contact_id TEXT -- 👈 ADDED THIS COLUMN
 );
 
 CREATE TABLE transactions (

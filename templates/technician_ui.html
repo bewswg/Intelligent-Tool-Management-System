@@ -1,95 +1,385 @@
-<!-- technician_ui.html -->
+<!-- templates/technician_ui.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8" />
-    <title>Technician Station</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Tool Station</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .tool-card {
+            transition: all 0.2s ease-in-out;
+        }
+        .tool-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .status-go { background-color: #dcfce7; color: #166534; }
+        .status-warning { background-color: #fef9c3; color: #854d0e; }
+        .status-no-go { background-color: #fecaca; color: #b91c1c; }
+        .status-overdue { background-color: #ddd6fe; color: #7e22ce; }
+        .nfc-icon {
+            font-size: 4rem;
+            color: #3b82f6;
+            margin-bottom: 1rem;
+        }
+    </style>
 </head>
-<body class="bg-gray-50 p-4">
-    <div id="screen" class="max-w-md mx-auto bg-white rounded-xl shadow-md p-6">
-        <!-- Idle State -->
+<body class="bg-gray-100 h-screen flex items-center justify-center p-4">
+
+    <div id="main-screen" class="w-full max-w-lg md:max-w-xl bg-white rounded-xl shadow-md p-4 md:p-6">
+        <!-- Idle Screen -->
         <div id="idle-screen" class="text-center">
-            <h2 class="text-xl font-bold mb-4">Smart Tool Station</h2>
-            <p class="text-gray-600">Please tap your NFC ID card to begin.</p>
-            <div class="mt-6 w-16 h-16 mx-auto rounded-full bg-blue-100 flex items-center justify-center">
-                <span class="text-2xl">📡</span>
+            <h2 class="text-2xl font-bold mb-4 text-gray-800">Smart Tool Station</h2>
+            <p class="text-gray-600 mb-6">Please authenticate by tapping your NFC card.</p>
+            <!-- Simulate NFC Tap -->
+            <div class="flex flex-col items-center">
+                <div class="nfc-icon">📡</div> <!-- Or use an NFC icon from a CDN if preferred -->
+                <button id="tap-card-btn" class="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition flex items-center justify-center">
+                    <span class="mr-2">👉</span> Tap NFC Card
+                </button>
+                <!-- OR Use dropdown for testing if needed -->
+                <div class="mt-4 w-full">
+                    <label for="user-select-sim" class="block text-sm font-medium text-gray-700 mb-2">OR Select User (for testing):</label>
+                    <select id="user-select-sim" class="w-full p-3 border border-gray-300 rounded-lg">
+                        <option value="">-- Select --</option>
+                        <option value="USR-001">Sarah Adams (Supervisor)</option>
+                        <option value="USR-002">John Doe (Technician)</option>
+                        <option value="USR-003">Maya Lin (Technician)</option>
+                        <option value="USR-004">David Chen (Technician)</option>
+                    </select>
+                    <button id="login-select-btn-sim" class="w-full mt-2 bg-gray-600 text-white py-3 rounded-lg font-semibold hover:bg-gray-700 transition">Login with Selection</button>
+                </div>
             </div>
         </div>
 
-        <!-- Authenticated State -->
+        <!-- Authenticated Screen (Initially Hidden) -->
         <div id="auth-screen" class="hidden">
-            <h2 class="text-lg font-semibold mb-2">Welcome, <span id="user-name">John</span>!</h2>
-            <p class="text-sm text-gray-500 mb-4">Select a tool to check out:</p>
-            <div id="tool-grid" class="grid grid-cols-2 gap-3 mb-4">
-                <!-- Tools will appear here -->
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-semibold">Welcome, <span id="welcome-user-name">User</span>!</h2>
+                <button id="logout-btn" class="text-sm text-red-600 hover:underline">Logout</button>
             </div>
-            <button id="logout-btn" class="text-sm text-red-600 hover:underline">Log Out</button>
+
+            <!-- Tool Selection Section -->
+            <div id="tool-selection-section">
+                <h3 class="text-lg font-medium mb-3">Select a Tool to Check Out:</h3>
+                <div id="tool-grid" class="grid grid-cols-1 gap-3 mb-4">
+                    <!-- Tool cards will be inserted here by JavaScript -->
+                </div>
+                <button id="cancel-selection-btn" class="w-full py-2 text-gray-600 hover:bg-gray-100 rounded">Check In Tool</button>
+            </div>
+
+            <!-- Checkout Confirmation Section (Initially Hidden) -->
+            <div id="checkout-confirm-section" class="hidden">
+                <h3 class="text-lg font-medium mb-2">Confirm Checkout</h3>
+                <p>Tool: <strong id="confirm-tool-name">[Tool Name]</strong> (<span id="confirm-tool-id">[Tool ID]</span>)</p>
+                <p>Status: <span id="confirm-tool-status" class="px-2 py-1 rounded text-xs font-medium">[Status]</span></p>
+                <div class="mt-4 flex space-x-2">
+                    <button id="confirm-checkout-btn" class="flex-1 w-full bg-green-600 text-white py-2 rounded hover:bg-green-700">Confirm</button>
+                    <button id="back-to-tools-btn" class="flex-1 w-full bg-gray-600 text-white py-2 rounded hover:bg-gray-700">Back</button>
+                </div>
+            </div>
+
+            <!-- Check-In Section (Initially Hidden) -->
+            <div id="checkin-section" class="hidden">
+                <h3 class="text-lg font-medium mb-2">Check In Tool:</h3>
+                <select id="checked-out-tools-select" class="w-full p-2 border rounded mb-2">
+                    <option value="">-- Loading... --</option>
+                </select>
+                <div class="mb-2">
+                    <label class="flex items-center">
+                        <input type="checkbox" id="report-damage-checkbox" class="mr-2">
+                        <span>Report Damage/Issue</span>
+                    </label>
+                </div>
+                <button id="confirm-checkin-btn" class="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700">Confirm Check-In</button>
+                <button id="back-to-main-btn" class="w-full mt-2 py-2 text-gray-600 hover:bg-gray-100 rounded">Back</button>
+            </div>
         </div>
     </div>
 
     <script>
+        // Global state
         let currentUser = null;
 
-        async function loadAvailableTools() {
-            const res = await fetch('/api/tools/available');
-            const tools = await res.json();
-            const grid = document.getElementById('tool-grid');
-            grid.innerHTML = '';
-            tools.forEach(tool => {
-                const toolEl = document.createElement('div');
-                toolEl.className = 'border rounded p-3 text-center cursor-pointer hover:bg-gray-100';
-                toolEl.innerHTML = `
-                    <div class="font-mono text-sm">${tool.id}</div>
-                    <div class="font-medium">${tool.name}</div>
-                    <div class="text-xs text-gray-500 mt-1">Due: ${tool.calibration_due}</div>
-                `;
-                toolEl.onclick = () => confirmCheckout(tool);
-                grid.appendChild(toolEl);
-            });
-        }
+        // DOM Elements
+        const mainScreen = document.getElementById('main-screen');
+        const idleScreen = document.getElementById('idle-screen');
+        const authScreen = document.getElementById('auth-screen');
+        const welcomeUserName = document.getElementById('welcome-user-name');
+        const toolGrid = document.getElementById('tool-grid');
+        const toolSelectionSection = document.getElementById('tool-selection-section');
+        const checkoutConfirmSection = document.getElementById('checkout-confirm-section');
+        const checkinSection = document.getElementById('checkin-section');
+        const checkedOutToolsSelect = document.getElementById('checked-out-tools-select');
+        const reportDamageCheckbox = document.getElementById('report-damage-checkbox');
 
-        async function confirmCheckout(tool) {
-            if (!confirm(`Check out ${tool.name} (${tool.id})?`)) return;
-            const response = await fetch('/api/checkout', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ user_id: currentUser.id, tool_id: tool.id })
-            });
-            const result = await response.json();
-            if (response.ok) {
-                alert('✅ Checkout approved! Box is unlocking...');
-                // In real system: Pi would unlock here
+        // --- Authentication ---
+        document.getElementById('tap-card-btn').addEventListener('click', () => {
+            // Simulate NFC tap by randomly selecting a user or prompting
+            const validUsers = ['USR-002', 'USR-003', 'USR-004']; // Exclude supervisor for tap sim
+            const randomUserId = validUsers[Math.floor(Math.random() * validUsers.length)];
+            authenticateUser(randomUserId);
+        });
+
+        document.getElementById('login-select-btn-sim').addEventListener('click', () => {
+            const userId = document.getElementById('user-select-sim').value;
+            if (userId) {
+                authenticateUser(userId);
             } else {
-                alert('❌ ' + result.message);
-            }
-        }
-
-        // Simulate NFC scan (for testing without hardware)
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'u') { // Press 'u' to simulate valid user
-                simulateUserAuth('USR-002');
+                alert("Please select a user.");
             }
         });
 
-        async function simulateUserAuth(userId) {
-            const res = await fetch(`/api/users/${userId}`);
-            if (res.ok) {
-                currentUser = await res.json();
-                document.getElementById('user-name').textContent = currentUser.name;
-                document.getElementById('idle-screen').classList.add('hidden');
-                document.getElementById('auth-screen').classList.remove('hidden');
-                loadAvailableTools();
-            } else {
-                alert('Invalid user ID.');
+        async function authenticateUser(userId) {
+            // Show a brief "Scanning..." or "Authenticating..." message
+            const tapBtn = document.getElementById('tap-card-btn');
+            const originalBtnText = tapBtn.innerHTML;
+            tapBtn.innerHTML = '<span class="mr-2">⏳</span> Authenticating...';
+            tapBtn.disabled = true;
+
+            try {
+                const response = await fetch(`/api/users/${userId}`);
+                if (response.ok) {
+                    const userData = await response.json();
+                    currentUser = userData;
+                    showAuthenticatedScreen();
+                } else {
+                    alert("Invalid User ID or error fetching user data.");
+                    // Reset button state on error
+                    tapBtn.innerHTML = originalBtnText;
+                    tapBtn.disabled = false;
+                }
+            } catch (error) {
+                console.error("Authentication error:", error);
+                alert("Error connecting to server.");
+                // Reset button state on error
+                tapBtn.innerHTML = originalBtnText;
+                tapBtn.disabled = false;
             }
         }
 
-        document.getElementById('logout-btn').onclick = () => {
+        function showAuthenticatedScreen() {
+            idleScreen.classList.add('hidden');
+            authScreen.classList.remove('hidden');
+            welcomeUserName.textContent = currentUser.name;
+
+            // Load available tools and checked-out tools for check-in
+            loadAvailableTools();
+            loadCheckedOutToolsForCheckin();
+        }
+
+        document.getElementById('logout-btn').addEventListener('click', () => {
             currentUser = null;
-            document.getElementById('auth-screen').classList.add('hidden');
-            document.getElementById('idle-screen').classList.remove('hidden');
-        };
+            authScreen.classList.add('hidden');
+            idleScreen.classList.remove('hidden');
+            document.getElementById('user-select-sim').value = '';
+            toolGrid.innerHTML = '';
+            checkedOutToolsSelect.innerHTML = '<option value="">-- Loading... --</option>';
+            // Reset button state if it was disabled
+            const tapBtn = document.getElementById('tap-card-btn');
+            tapBtn.innerHTML = '<span class="mr-2">👉</span> Tap NFC Card';
+            tapBtn.disabled = false;
+        });
+
+        // --- Tool Checkout ---
+        async function loadAvailableTools() {
+            if (!currentUser) return;
+            try {
+                const response = await fetch('/api/tools/available');
+                const tools = await response.json();
+                renderToolGrid(tools);
+            } catch (error) {
+                console.error("Error loading available tools:", error);
+                toolGrid.innerHTML = '<p class="text-red-500">Error loading tools.</p>';
+            }
+        }
+
+        function renderToolGrid(tools) {
+            toolGrid.innerHTML = '';
+            if (tools.length === 0) {
+                toolGrid.innerHTML = '<p class="text-gray-500 text-center py-4">No tools available.</p>';
+                return;
+            }
+            tools.forEach(tool => {
+                let statusClass = 'status-go';
+                let statusText = 'GO';
+                if (tool.status === 'Overdue') {
+                    statusClass = 'status-no-go';
+                    statusText = 'NO-GO (Overdue)';
+                } else if (new Date(tool.calibration_due) < new Date()) { // Check if due date is in the past
+                    statusClass = 'status-overdue';
+                    statusText = 'NO-GO (Cal Due)';
+                } else if (new Date(tool.calibration_due) < new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)) { // Due within 7 days
+                    statusClass = 'status-warning';
+                    statusText = 'WARNING (Due Soon)';
+                }
+
+                const toolCard = document.createElement('div');
+                toolCard.className = 'tool-card p-4 border rounded-lg bg-white cursor-pointer';
+                toolCard.innerHTML = `
+                    <div class="font-mono text-sm">${tool.id}</div>
+                    <div class="font-semibold">${tool.name}</div>
+                    <div class="mt-2">
+                        <span class="${statusClass} text-xs font-medium px-2 py-0.5 rounded">${statusText}</span>
+                        <span class="text-xs text-gray-500 ml-2">Due: ${tool.calibration_due}</span>
+                    </div>
+                `;
+                toolCard.addEventListener('click', () => confirmCheckout(tool));
+                toolGrid.appendChild(toolCard);
+            });
+        }
+
+        function confirmCheckout(tool) {
+            // Show confirmation screen
+            document.getElementById('confirm-tool-name').textContent = tool.name;
+            document.getElementById('confirm-tool-id').textContent = tool.id;
+
+            let statusClass = 'status-go';
+            let statusText = 'GO';
+            if (tool.status === 'Overdue') {
+                statusClass = 'status-no-go';
+                statusText = 'NO-GO (Overdue)';
+            } else if (new Date(tool.calibration_due) < new Date()) {
+                statusClass = 'status-overdue';
+                statusText = 'NO-GO (Cal Due)';
+            } else if (new Date(tool.calibration_due) < new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)) {
+                statusClass = 'status-warning';
+                statusText = 'WARNING (Due Soon)';
+            }
+            document.getElementById('confirm-tool-status').className = `${statusClass} px-2 py-1 rounded text-xs font-medium`;
+            document.getElementById('confirm-tool-status').textContent = statusText;
+
+            toolSelectionSection.classList.add('hidden');
+            checkoutConfirmSection.classList.remove('hidden');
+
+            // Attach the event listener for the Confirm button *after* the section is shown
+            const confirmBtn = document.getElementById('confirm-checkout-btn');
+            // Clear any previous listeners to avoid duplicates
+            const newConfirmBtn = confirmBtn.cloneNode(true);
+            confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+
+            newConfirmBtn.addEventListener('click', async () => {
+                console.log("Confirm button clicked"); // Debugging line
+                const toolId = document.getElementById('confirm-tool-id').textContent;
+                if (!currentUser || !toolId) return;
+
+                // Check status again before attempting checkout
+                const response = await fetch(`/api/tools/${toolId}`);
+                const toolDetails = await response.json();
+                if (toolDetails.status === 'Overdue' || new Date(toolDetails.calibration_due) < new Date()) {
+                     alert("Cannot check out: Tool is overdue or calibration is past due.");
+                     return; // Do not proceed with checkout
+                }
+
+                try {
+                    const checkoutResponse = await fetch('/api/checkout', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ user_id: currentUser.id, tool_id: toolId })
+                    });
+
+                    if (checkoutResponse.ok) {
+                        const result = await checkoutResponse.json();
+                        alert(`✅ Checkout successful! ${result.message}. (Simulated unlock)`); // Simulate unlock message
+                        // Reload tools to reflect changes
+                        loadAvailableTools();
+                        loadCheckedOutToolsForCheckin(); // Reload check-in list too
+                        // Go back to tool selection or idle
+                        checkoutConfirmSection.classList.add('hidden');
+                        toolSelectionSection.classList.remove('hidden');
+                    } else {
+                        const errorData = await checkoutResponse.json();
+                        alert(`❌ Checkout failed: ${errorData.message}`);
+                    }
+                } catch (error) {
+                    console.error("Checkout error:", error);
+                    alert("Error connecting to server.");
+                }
+            }, { once: true }); // Use { once: true } to attach the listener only once
+
+            // Also re-attach the Back button listener (it might have been detached)
+            const backBtn = document.getElementById('back-to-tools-btn');
+            const newBackBtn = backBtn.cloneNode(true);
+            backBtn.parentNode.replaceChild(newBackBtn, backBtn);
+
+            newBackBtn.addEventListener('click', () => {
+                checkoutConfirmSection.classList.add('hidden');
+                toolSelectionSection.classList.remove('hidden');
+            });
+        }
+
+        // --- Tool Check-In ---
+        async function loadCheckedOutToolsForCheckin() {
+            if (!currentUser) return;
+            try {
+                // Fetch all tools and filter for those held by current user and status 'In Use'
+                const response = await fetch('/api/tools');
+                const allTools = await response.json();
+                const checkedOutByUser = allTools.filter(t => t.current_holder === currentUser.id && t.status === 'In Use');
+
+                checkedOutToolsSelect.innerHTML = '<option value="">-- Select Tool --</option>';
+                checkedOutByUser.forEach(tool => {
+                    const option = document.createElement('option');
+                    option.value = tool.id;
+                    option.textContent = `${tool.name} (${tool.id})`;
+                    checkedOutToolsSelect.appendChild(option);
+                });
+            } catch (error) {
+                console.error("Error loading checked-out tools for check-in:", error);
+                checkedOutToolsSelect.innerHTML = '<option value="">Error loading tools</option>';
+            }
+        }
+
+        document.getElementById('confirm-checkin-btn').addEventListener('click', async () => {
+            const toolId = checkedOutToolsSelect.value;
+            const reportIssue = reportDamageCheckbox.checked;
+            if (!toolId) {
+                alert("Please select a tool to check in.");
+                return;
+            }
+
+            try {
+                const checkinResponse = await fetch('/api/checkin', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tool_id: toolId, report_issue: reportIssue })
+                });
+
+                if (checkinResponse.ok) {
+                    const result = await checkinResponse.json();
+                    const statusMessage = reportIssue ? 'Tool checked in and marked as Under Maintenance.' : 'Tool checked in successfully.';
+                    alert(`✅ ${statusMessage}`);
+                    // Reload lists
+                    loadAvailableTools();
+                    loadCheckedOutToolsForCheckin();
+                    // Reset check-in section
+                    checkedOutToolsSelect.value = '';
+                    reportDamageCheckbox.checked = false;
+                    // Go back to main selection
+                    checkinSection.classList.add('hidden');
+                    toolSelectionSection.classList.remove('hidden');
+                } else {
+                    const errorData = await checkinResponse.json();
+                    alert(`❌ Check-in failed: ${errorData.message}`);
+                }
+            } catch (error) {
+                console.error("Check-in error:", error);
+                alert("Error connecting to server.");
+            }
+        });
+
+        document.getElementById('back-to-main-btn').addEventListener('click', () => {
+             checkinSection.classList.add('hidden');
+             toolSelectionSection.classList.remove('hidden');
+        });
+
+        // --- Navigation ---
+        document.getElementById('cancel-selection-btn').addEventListener('click', () => {
+             toolSelectionSection.classList.add('hidden');
+             checkinSection.classList.remove('hidden');
+        });
+
     </script>
 </body>
 </html>
