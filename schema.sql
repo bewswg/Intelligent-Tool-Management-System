@@ -3,7 +3,17 @@ DROP TABLE IF EXISTS tools;
 DROP TABLE IF EXISTS users;
 DROP TABLE IF EXISTS transactions;
 DROP TABLE IF EXISTS audit_log;
+DROP TABLE IF EXISTS projects;
 
+-- Users Table
+CREATE TABLE users (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    role TEXT NOT NULL,
+    contact_id TEXT
+);
+
+-- Tools Table
 CREATE TABLE tools (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -14,13 +24,7 @@ CREATE TABLE tools (
     total_usage_hours REAL DEFAULT 0.0
 );
 
-CREATE TABLE users (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    role TEXT NOT NULL,
-    contact_id TEXT -- 👈 ADDED THIS COLUMN
-);
-
+-- Transactions Table
 CREATE TABLE transactions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id TEXT NOT NULL,
@@ -31,6 +35,7 @@ CREATE TABLE transactions (
     FOREIGN KEY(tool_id) REFERENCES tools(id)
 );
 
+-- Audit Log Table
 CREATE TABLE audit_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -38,4 +43,12 @@ CREATE TABLE audit_log (
     action TEXT NOT NULL,
     details TEXT,
     FOREIGN KEY(user_id) REFERENCES users(id)
+);
+
+-- Projects Table (NEW)
+CREATE TABLE projects (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    briefing TEXT NOT NULL,
+    tool_list TEXT NOT NULL -- JSON array of tool IDs
 );

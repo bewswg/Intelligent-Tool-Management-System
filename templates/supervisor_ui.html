@@ -1,4 +1,3 @@
-<!-- templates/supervisor_ui.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -8,886 +7,1106 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        .filter-btn.active {
-            background-color: #3b82f6;
-            color: white;
+        /* === Custom Styles === */
+        
+        /* Scrollbar Styling */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        /* Navigation States */
+        .active-page {
+            background-color: #1e293b; /* slate-800 */
+            border-left-width: 4px;
+            border-color: #3b82f6; /* blue-500 */
         }
-        .sort-arrow {
-            margin-left: 4px;
-            font-size: 0.8em;
+
+        /* Page Transitions */
+        .page { display: none; animation: fadeIn 0.2s ease-in-out; }
+        .page.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* Calendar Specifics */
+        .cal-day { min-height: 110px; transition: background-color 0.15s; }
+        .cal-day:hover { background-color: #f8fafc; }
+        .cal-pill { 
+            font-size: 0.65rem; 
+            padding: 2px 6px; 
+            border-radius: 9999px; 
+            margin-bottom: 2px; 
+            white-space: nowrap; 
+            overflow: hidden; 
+            text-overflow: ellipsis; 
+            cursor: pointer;
+            font-weight: 600;
+            transition: transform 0.1s;
         }
-        .page {
-            display: none;
-        }
-        .page.active {
-            display: block;
-        }
+        .cal-pill:hover { transform: scale(1.05); z-index: 10; }
+
+        /* Modal Overlay */
         .modal-overlay {
             display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.5);
-            z-index: 1000;
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(15, 23, 42, 0.6); /* slate-900/60 */
+            backdrop-filter: blur(2px);
+            z-index: 50;
+            align-items: center;
+            justify-content: center;
         }
-        .modal-content {
-            background: white;
-            margin: 10% auto;
-            padding: 20px;
-            width: 90%;
-            max-width: 500px;
-            border-radius: 8px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        }
+        
+        /* Table Sort Headers */
+        .sort-header { cursor: pointer; user-select: none; }
+        .sort-header:hover { background-color: #f1f5f9; }
     </style>
 </head>
-<body class="bg-gray-100">
+<body class="bg-gray-100 text-slate-800 font-sans h-screen flex overflow-hidden">
 
-<div class="flex">
-    <!-- Sidebar -->
-    <div class="w-64 bg-gray-800 text-white min-h-screen">
-        <div class="p-4 text-xl font-bold">Tool Management</div>
-        <nav class="mt-6">
-            <a href="#" class="block px-4 py-2 hover:bg-gray-700 active-page" data-page="dashboard">Dashboard</a>
-            <a href="#" class="block px-4 py-2 hover:bg-gray-700" data-page="live-view">Live View</a>
-            <a href="#" class="block px-4 py-2 hover:bg-gray-700" data-page="inventory">Inventory</a>
-            <a href="#" class="block px-4 py-2 hover:bg-gray-700" data-page="users">Users</a>
-            <a href="#" class="block px-4 py-2 hover:bg-gray-700" data-page="calibration">Calibration</a>
-            <a href="#" class="block px-4 py-2 hover:bg-gray-700" data-page="audit-trail">Audit Trail</a>
+    <aside class="w-64 bg-slate-900 text-white flex flex-col shadow-xl z-20 flex-shrink-0">
+        <div class="p-6 flex items-center gap-3 text-xl font-bold tracking-tight border-b border-slate-800">
+            <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shadow-lg shadow-blue-500/30">
+                <i class="fas fa-plane text-white text-sm"></i>
+            </div>
+            <span>AeroTool<span class="text-blue-500">MRO</span></span>
+        </div>
+
+        <nav class="flex-1 mt-6 space-y-1 px-2">
+            <a href="#" class="flex items-center px-4 py-3 text-sm font-medium rounded-lg active-page transition-colors" data-page="dashboard">
+                <i class="fas fa-home w-6 text-center mr-2 text-slate-400"></i> Dashboard
+            </a>
+            <a href="#" class="flex items-center px-4 py-3 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors border-l-4 border-transparent" data-page="live-view">
+                <i class="fas fa-video w-6 text-center mr-2 text-slate-400"></i> Live View
+            </a>
+            <a href="#" class="flex items-center px-4 py-3 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors border-l-4 border-transparent" data-page="inventory">
+                <i class="fas fa-wrench w-6 text-center mr-2 text-slate-400"></i> Inventory
+            </a>
+            <a href="#" class="flex items-center px-4 py-3 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors border-l-4 border-transparent" data-page="users">
+                <i class="fas fa-users w-6 text-center mr-2 text-slate-400"></i> Users
+            </a>
+            <a href="#" class="flex items-center px-4 py-3 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors border-l-4 border-transparent" data-page="calibration">
+                <i class="fas fa-calendar-check w-6 text-center mr-2 text-slate-400"></i> Calibration
+            </a>
+            <a href="#" class="flex items-center px-4 py-3 text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors border-l-4 border-transparent" data-page="audit-trail">
+                <i class="fas fa-clipboard-list w-6 text-center mr-2 text-slate-400"></i> Audit Trail
+            </a>
         </nav>
-    </div>
 
-    <!-- Main Content -->
-    <div class="flex-1 p-6">
-        <!-- Dashboard Page -->
+        <div class="p-4 border-t border-slate-800">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-xs font-bold">SA</div>
+                <div>
+                    <p class="text-sm font-medium">Sarah Adams</p>
+                    <p class="text-xs text-slate-500">Supervisor</p>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <main class="flex-1 overflow-y-auto p-8 relative">
+        
         <div id="dashboard-page" class="page active">
-            <h1 class="text-2xl font-bold mb-6">Dashboard</h1>
+            <header class="flex justify-between items-end mb-8">
+                <div>
+                    <h1 class="text-3xl font-bold text-slate-900">System Overview</h1>
+                    <p class="text-slate-500 mt-1">Real-time status of MRO tooling assets.</p>
+                </div>
+                <button id="ai-forecast-btn" class="group bg-white border border-purple-200 text-purple-700 px-5 py-2.5 rounded-lg shadow-sm hover:shadow-md hover:border-purple-400 transition-all flex items-center gap-2 font-medium">
+                    <i class="fas fa-robot text-purple-500 group-hover:scale-110 transition-transform"></i> 
+                    <span>Run AI Calibration Forecast</span>
+                </button>
+            </header>
             
-            <!-- KPI Cards -->
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                <div class="bg-white p-4 rounded shadow">
-                    <h3 class="text-gray-500">Available</h3>
-                    <p class="text-2xl" id="kpi-available">0</p>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between h-32">
+                    <div class="text-slate-500 text-xs font-bold uppercase tracking-wider">Available Tools</div>
+                    <div class="text-4xl font-bold text-green-600" id="kpi-available">--</div>
+                    <div class="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden"><div class="bg-green-500 h-full" style="width: 60%"></div></div>
                 </div>
-                <div class="bg-white p-4 rounded shadow">
-                    <h3 class="text-gray-500">In Use</h3>
-                    <p class="text-2xl" id="kpi-in-use">0</p>
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between h-32">
+                    <div class="text-slate-500 text-xs font-bold uppercase tracking-wider">Currently In Use</div>
+                    <div class="text-4xl font-bold text-blue-600" id="kpi-in-use">--</div>
+                    <div class="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden"><div class="bg-blue-500 h-full" style="width: 20%"></div></div>
                 </div>
-                <div class="bg-white p-4 rounded shadow">
-                    <h3 class="text-gray-500">Overdue</h3>
-                    <p class="text-2xl" id="kpi-overdue">0</p>
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between h-32">
+                    <div class="text-slate-500 text-xs font-bold uppercase tracking-wider">Calibration Overdue</div>
+                    <div class="text-4xl font-bold text-red-600" id="kpi-overdue">--</div>
+                    <div class="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden"><div class="bg-red-500 h-full" style="width: 10%"></div></div>
                 </div>
-                <div class="bg-white p-4 rounded shadow">
-                    <h3 class="text-gray-500">Under Maintenance</h3>
-                    <p class="text-2xl" id="kpi-maintenance">0</p>
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between h-32">
+                    <div class="text-slate-500 text-xs font-bold uppercase tracking-wider">Under Maintenance</div>
+                    <div class="text-4xl font-bold text-orange-500" id="kpi-maintenance">--</div>
+                    <div class="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden"><div class="bg-orange-500 h-full" style="width: 5%"></div></div>
                 </div>
             </div>
 
-            <!-- AI Forecast Button -->
-            <div class="mb-6">
-                <button id="ai-forecast-btn" class="bg-purple-600 text-white px-4 py-2 rounded flex items-center">
-                    <i class="fas fa-robot mr-2"></i> Run AI Calibration Forecast
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div class="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col">
+                    <div class="p-5 border-b border-slate-100 flex justify-between items-center">
+                        <h2 class="font-bold text-lg flex items-center gap-2">
+                            <i class="fas fa-bell text-yellow-500"></i> Critical Alerts
+                        </h2>
+                        <span class="text-xs bg-slate-100 px-2 py-1 rounded text-slate-500">Real-time</span>
+                    </div>
+                    <div id="alerts-container" class="p-5 space-y-3 flex-1 max-h-96 overflow-y-auto">
+                        </div>
+                    <div id="no-alerts" class="p-10 text-center text-slate-400 italic">
+                        <i class="fas fa-check-circle text-green-400 text-2xl mb-2 block"></i>
+                        No active critical alerts.
+                    </div>
+                </div>
+
+                <div class="space-y-6">
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200">
+                        <div class="p-5 border-b border-slate-100">
+                            <h2 class="font-bold text-lg">Recent Transactions</h2>
+                        </div>
+                        <div id="activity-log" class="p-4 space-y-3 text-sm max-h-64 overflow-y-auto">
+                            </div>
+                    </div>
+
+                    <div class="bg-red-50 rounded-xl border border-red-100 p-5">
+                        <div class="flex items-start gap-3">
+                            <div class="bg-red-100 p-2 rounded-lg text-red-600"><i class="fas fa-lock-open"></i></div>
+                            <div>
+                                <h3 class="font-bold text-red-900">Emergency Override</h3>
+                                <p class="text-xs text-red-700 mt-1 mb-3">Force unlock the Smart Box. This action is strictly logged.</p>
+                                <button id="emergency-btn" class="w-full bg-red-600 hover:bg-red-700 text-white text-sm font-bold py-2 rounded shadow transition">Trigger Manual Unlock</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="live-view-page" class="page">
+            <h1 class="text-3xl font-bold mb-6">Live Tool Usage</h1>
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <table class="min-w-full divide-y divide-slate-200">
+                    <thead class="bg-slate-50">
+                        <tr>
+                            <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Tool Details</th>
+                            <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Current Holder</th>
+                            <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
+                            <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Duration Held</th>
+                        </tr>
+                    </thead>
+                    <tbody id="live-view-table-body" class="divide-y divide-slate-100"></tbody>
+                </table>
+                <div id="no-live-tools" class="p-12 text-center text-slate-400 hidden">
+                    No tools are currently checked out.
+                </div>
+            </div>
+        </div>
+
+        <div id="inventory-page" class="page">
+            <div class="flex justify-between items-center mb-6">
+                <h1 class="text-3xl font-bold">Tool Inventory</h1>
+                <div class="flex gap-3">
+                    <button id="batch-edit-btn" class="hidden bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-lg shadow-sm transition font-medium">
+                        <i class="fas fa-pen-to-square mr-2"></i> Batch Edit (<span id="selected-count">0</span>)
+                    </button>
+                    <button id="add-tool-btn" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg shadow-sm transition font-medium">
+                        <i class="fas fa-plus mr-2"></i> Add Tool
+                    </button>
+                </div>
+            </div>
+
+            <div class="flex gap-2 mb-6 overflow-x-auto pb-2">
+                <button class="filter-btn px-4 py-1.5 rounded-full text-sm font-medium bg-white border border-slate-200 hover:border-blue-400 transition active" data-status="all">All</button>
+                <button class="filter-btn px-4 py-1.5 rounded-full text-sm font-medium bg-white border border-slate-200 hover:border-green-400 transition" data-status="Available">Available</button>
+                <button class="filter-btn px-4 py-1.5 rounded-full text-sm font-medium bg-white border border-slate-200 hover:border-blue-400 transition" data-status="In Use">In Use</button>
+                <button class="filter-btn px-4 py-1.5 rounded-full text-sm font-medium bg-white border border-slate-200 hover:border-red-400 transition" data-status="Overdue">Overdue</button>
+                <button class="filter-btn px-4 py-1.5 rounded-full text-sm font-medium bg-white border border-slate-200 hover:border-orange-400 transition" data-status="Under Maintenance">Maintenance</button>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <table class="min-w-full divide-y divide-slate-200">
+                    <thead class="bg-slate-50">
+                        <tr>
+                            <th class="w-12 px-6 py-3 text-center"><input type="checkbox" id="select-all-tools" class="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"></th>
+                            <th class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider sort-header" data-column="id">ID <i class="fas fa-sort ml-1 text-slate-300"></i></th>
+                            <th class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider sort-header" data-column="name">Name <i class="fas fa-sort ml-1 text-slate-300"></i></th>
+                            <th class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider sort-header" data-column="status">Status <i class="fas fa-sort ml-1 text-slate-300"></i></th>
+                            <th class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Holder</th>
+                            <th class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider sort-header" data-column="calibration_due">Calibration <i class="fas fa-sort ml-1 text-slate-300"></i></th>
+                            <th class="px-6 py-3 text-center text-xs font-bold text-slate-500 uppercase tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="inventory-table-body" class="divide-y divide-slate-100"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="users-page" class="page">
+            <div class="flex justify-between items-center mb-6">
+                <h1 class="text-3xl font-bold">User Management</h1>
+                <button id="add-user-btn" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg shadow-sm transition font-medium">
+                    <i class="fas fa-user-plus mr-2"></i> Add User
                 </button>
             </div>
-
-            <!-- Alerts Panel -->
-            <div class="bg-white p-4 rounded shadow mb-6">
-                <h2 class="text-xl font-semibold mb-4">Critical Alerts</h2>
-                <div id="alerts-container" class="space-y-2">
-                    <!-- Alerts will be inserted here -->
-                </div>
-                <div id="no-alerts" class="text-gray-500">No active alerts.</div>
-            </div>
-
-            <!-- Activity Log -->
-            <div class="bg-white p-4 rounded shadow mt-6">
-                <h2 class="text-xl font-semibold mb-4">Recent Activity Log</h2>
-                <div class="text-sm text-gray-600 mb-2">Last 20 transactions</div>
-                <div id="activity-log" class="space-y-2 max-h-60 overflow-y-auto">
-                    <!-- Log entries will appear here -->
-                </div>
-            </div>
-
-            <!-- Emergency Unlock -->
-            <div class="bg-red-50 p-4 rounded shadow mt-6">
-                <h2 class="text-xl font-semibold mb-2 text-red-800">Emergency Manual Unlock</h2>
-                <p class="mb-3">Use only in case of system failure.</p>
-                <button id="emergency-btn" class="bg-red-600 text-white px-4 py-2 rounded">Trigger Unlock</button>
-            </div>
-        </div>
-
-        <!-- Live View Page -->
-        <div id="live-view-page" class="page">
-            <h1 class="text-2xl font-bold mb-4">Live Tool Usage</h1>
-            <p class="text-gray-600 mb-4">Real-time view of tools currently in use.</p>
-            <div class="bg-white p-4 rounded shadow">
-                <table class="min-w-full">
-                    <thead class="bg-gray-100">
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <table class="min-w-full divide-y divide-slate-200">
+                    <thead class="bg-slate-50">
                         <tr>
-                            <th class="p-3 text-left">Tool</th>
-                            <th class="p-3 text-left">User</th>
-                            <th class="p-3 text-left">Status</th>
-                            <th class="p-3 text-left">Time Held</th>
+                            <th class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase">ID</th>
+                            <th class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase">Full Name</th>
+                            <th class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase">Role</th>
+                            <th class="px-6 py-3 text-right text-xs font-bold text-slate-500 uppercase">Actions</th>
                         </tr>
                     </thead>
-                    <tbody id="live-view-table-body">
-                        <!-- Filled by JavaScript -->
-                    </tbody>
-                </table>
-                <div id="no-live-tools" class="text-gray-500 p-4 text-center hidden">
-                    No tools are currently in use.
-                </div>
-            </div>
-        </div>
-
-        <!-- Inventory Page -->
-        <div id="inventory-page" class="page">
-            <div class="flex justify-between items-center mb-4">
-                <h1 class="text-2xl font-bold">Tool Inventory</h1>
-                <button id="add-tool-btn" class="bg-blue-600 text-white px-3 py-1 rounded">+ Add Tool</button>
-            </div>
-            <div class="mb-4 flex flex-wrap gap-2">
-                <span class="font-medium self-center">Filter by Status:</span>
-                <button class="filter-btn px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 active" data-status="all">All</button>
-                <button class="filter-btn px-3 py-1 rounded bg-gray-200 hover:bg-gray-300" data-status="Available">Available</button>
-                <button class="filter-btn px-3 py-1 rounded bg-gray-200 hover:bg-gray-300" data-status="In Use">In Use</button>
-                <button class="filter-btn px-3 py-1 rounded bg-gray-200 hover:bg-gray-300" data-status="Overdue">Overdue</button>
-                <button class="filter-btn px-3 py-1 rounded bg-gray-200 hover:bg-gray-300" data-status="Under Maintenance">Under Maintenance</button>
-            </div>
-            <div class="overflow-x-auto">
-                <table class="min-w-full bg-white border rounded">
-                    <thead class="bg-gray-200 text-left">
-                        <tr>
-                            <th class="p-3 cursor-pointer sort-header" data-column="id">ID <span class="sort-arrow"></span></th>
-                            <th class="p-3 cursor-pointer sort-header" data-column="name">Name <span class="sort-arrow"></span></th>
-                            <th class="p-3 cursor-pointer sort-header" data-column="status">Status <span class="sort-arrow"></span></th>
-                            <th class="p-3 cursor-pointer sort-header" data-column="current_holder">Holder <span class="sort-arrow"></span></th>
-                            <th class="p-3 cursor-pointer sort-header" data-column="calibration_due">Calibration Due <span class="sort-arrow"></span></th>
-                            <th class="p-3">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody id="inventory-table-body" class="divide-y">
-                        <!-- Filled by JS -->
-                    </tbody>
+                    <tbody id="users-table-body" class="divide-y divide-slate-100"></tbody>
                 </table>
             </div>
         </div>
 
-        <!-- Users Page -->
-        <div id="users-page" class="page">
-            <div class="flex justify-between items-center mb-4">
-                <h1 class="text-2xl font-bold">User Management</h1>
-                <button id="add-user-btn" class="bg-blue-600 text-white px-3 py-1 rounded">+ Add User</button>
-            </div>
-            <table class="min-w-full bg-white border rounded">
-                <thead class="bg-gray-200 text-left">
-                    <tr>
-                        <th class="p-3">ID</th>
-                        <th class="p-3">Name</th>
-                        <th class="p-3">Role</th>
-                        <th class="p-3">Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="users-table-body" class="divide-y">
-                    <!-- Filled by JS -->
-                </tbody>
-            </table>
-        </div>
-
-        <!-- Calibration Page -->
         <div id="calibration-page" class="page">
-            <h1 class="text-2xl font-bold mb-4">Calibration Calendar</h1>
-            <div class="bg-white p-4 rounded shadow mb-6">
-                <div class="flex justify-between items-center mb-4">
-                    <button id="prev-month" class="text-blue-600"><i class="fas fa-chevron-left"></i></button>
-                    <h2 id="calendar-month" class="text-xl font-semibold">October 2025</h2>
-                    <button id="next-month" class="text-blue-600"><i class="fas fa-chevron-right"></i></button>
+            <div class="flex justify-between items-center mb-6">
+                <h1 class="text-3xl font-bold">Calibration Calendar</h1>
+                <div class="flex items-center gap-3">
+                    <button id="jump-today-btn" class="text-sm text-blue-600 font-medium hover:underline mr-2">Jump to Today</button>
+                    <div class="flex bg-white rounded-lg border border-slate-200 shadow-sm">
+                        <button id="prev-month" class="px-3 py-2 hover:bg-slate-50 border-r border-slate-200 rounded-l-lg text-slate-600"><i class="fas fa-chevron-left"></i></button>
+                        <h2 id="calendar-month" class="px-4 py-2 font-bold text-slate-700 min-w-[160px] text-center">October 2025</h2>
+                        <button id="next-month" class="px-3 py-2 hover:bg-slate-50 border-l border-slate-200 rounded-r-lg text-slate-600"><i class="fas fa-chevron-right"></i></button>
+                    </div>
                 </div>
-                <div id="calendar-grid" class="grid grid-cols-7 gap-1">
-                    <!-- Filled by JS -->
+            </div>
+
+            <div class="flex gap-6 mb-4 text-xs font-medium text-slate-500">
+                <div class="flex items-center"><span class="w-2.5 h-2.5 rounded-full bg-red-500 mr-2"></span> Overdue / Past</div>
+                <div class="flex items-center"><span class="w-2.5 h-2.5 rounded-full bg-blue-500 mr-2"></span> Upcoming Due</div>
+                <div class="flex items-center"><span class="w-2.5 h-2.5 rounded-full bg-yellow-100 border border-yellow-400 mr-2"></span> Today</div>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
+                <div class="grid grid-cols-7 bg-slate-50 border-b border-slate-200">
+                    <div class="py-3 text-center text-xs font-bold text-slate-400 uppercase">Sun</div>
+                    <div class="py-3 text-center text-xs font-bold text-slate-400 uppercase">Mon</div>
+                    <div class="py-3 text-center text-xs font-bold text-slate-400 uppercase">Tue</div>
+                    <div class="py-3 text-center text-xs font-bold text-slate-400 uppercase">Wed</div>
+                    <div class="py-3 text-center text-xs font-bold text-slate-400 uppercase">Thu</div>
+                    <div class="py-3 text-center text-xs font-bold text-slate-400 uppercase">Fri</div>
+                    <div class="py-3 text-center text-xs font-bold text-slate-400 uppercase">Sat</div>
                 </div>
+                <div id="calendar-grid" class="grid grid-cols-7 divide-x divide-y divide-slate-200 bg-slate-200 gap-[1px]">
+                    </div>
             </div>
         </div>
 
-        <!-- Audit Trail Page -->
         <div id="audit-trail-page" class="page">
-            <h1 class="text-2xl font-bold mb-4">Audit Trail Explorer</h1>
-            <p class="text-gray-600 mb-4">Searchable log of all system events for compliance and review.</p>
-            <div class="mb-4 flex gap-2 flex-wrap">
-                <input type="text" id="audit-search" placeholder="Search details..." class="px-3 py-1 border rounded">
-                <select id="audit-action-filter" class="px-3 py-1 border rounded">
-                    <option value="">All Actions</option>
-                    <option value="EMERGENCY_UNLOCK">Emergency Unlock</option>
-                    <option value="TOOL_CHECKOUT">Tool Checkout</option>
-                    <option value="TOOL_CHECKIN">Tool Check-in</option>
-                    <option value="TOOL_CREATED">Tool Created</option>
-                    <option value="TOOL_DELETED">Tool Deleted</option>
-                </select>
-                <button id="audit-apply-filters" class="bg-gray-600 text-white px-3 py-1 rounded">Apply</button>
+            <h1 class="text-3xl font-bold mb-6">Audit Trail Explorer</h1>
+            
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-wrap items-center gap-4 mb-6">
+                <div class="flex-1 relative">
+                    <i class="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400"></i>
+                    <input type="text" id="audit-search" placeholder="Search logs (e.g. 'USR-002' or 'Torque')..." class="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none">
+                </div>
+                <div class="w-48">
+                    <select id="audit-action-filter" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white">
+                        <option value="">All Actions</option>
+                        <option value="TOOL_CHECKOUT">Checkout</option>
+                        <option value="TOOL_CHECKIN">Check-in</option>
+                        <option value="BATCH_CHECKOUT">Batch Checkout</option>
+                        <option value="EMERGENCY_UNLOCK">Emergency Unlock</option>
+                        <option value="TOOL_CREATED">Tool Created</option>
+                        <option value="TOOL_UPDATED">Tool Updated</option>
+                        <option value="TOOL_STATUS_CHANGE">Status Change</option>
+                        <option value="BATCH_UPDATE">Batch Admin Edit</option>
+                        <option value="USER_CREATED">User Created</option>
+                    </select>
+                </div>
+                <button id="audit-apply-filters" class="bg-slate-800 hover:bg-slate-700 text-white px-6 py-2 rounded-lg font-medium transition">Search</button>
+                
+                <div class="border-l pl-4 border-slate-300">
+                    <div class="flex items-center text-green-600 text-xs font-bold bg-green-50 px-3 py-1.5 rounded-full border border-green-200">
+                        <span class="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></span> LIVE STREAM
+                    </div>
+                </div>
             </div>
-            <div class="bg-white p-4 rounded shadow overflow-x-auto">
-                <table class="min-w-full">
-                    <thead class="bg-gray-100">
+
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <table class="min-w-full divide-y divide-slate-200">
+                    <thead class="bg-slate-50">
                         <tr>
-                            <th class="p-3 text-left">Timestamp</th>
-                            <th class="p-3 text-left">User</th>
-                            <th class="p-3 text-left">Action</th>
-                            <th class="p-3 text-left">Details</th>
+                            <th class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider w-48">Timestamp</th>
+                            <th class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider w-48">User</th>
+                            <th class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider w-48">Action</th>
+                            <th class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Details</th>
                         </tr>
                     </thead>
-                    <tbody id="audit-table-body">
-                        <!-- Filled by JavaScript -->
-                    </tbody>
+                    <tbody id="audit-table-body" class="divide-y divide-slate-100"></tbody>
                 </table>
-                <div id="no-audit-logs" class="text-gray-500 p-4 text-center hidden">
-                    No audit logs found.
+                <div id="no-audit-logs" class="p-12 text-center text-slate-400 hidden">No logs found matching your filters.</div>
+            </div>
+        </div>
+
+    </main>
+
+    <div id="tools-due-modal" class="modal-overlay">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-md p-0 overflow-hidden transform transition-all scale-100">
+            <div class="bg-slate-50 p-4 border-b border-slate-100 flex justify-between items-center">
+                <h3 class="font-bold text-slate-700">Calibration Due: <span id="modal-date" class="text-blue-600"></span></h3>
+                <button id="close-tools-modal" class="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button>
+            </div>
+            <div class="p-4 max-h-80 overflow-y-auto">
+                <ul id="tools-due-list" class="space-y-2"></ul>
+            </div>
+        </div>
+    </div>
+
+    <div id="tool-modal" class="modal-overlay">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg p-6">
+            <h2 class="text-2xl font-bold text-slate-800 mb-6" id="tool-modal-title">Manage Tool</h2>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Tool ID</label>
+                    <input type="text" id="tool-id" placeholder="e.g. TW-001" class="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Tool Name</label>
+                    <input type="text" id="tool-name" placeholder="e.g. Digital Torque Wrench" class="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Calibration Due</label>
+                        <input type="date" id="tool-cal-date" class="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Status</label>
+                        <select id="tool-status" class="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white">
+                            <option value="Available">Available</option>
+                            <option value="In Use">In Use</option>
+                            <option value="Overdue">Overdue</option>
+                            <option value="Under Maintenance">Under Maintenance</option>
+                        </select>
+                    </div>
                 </div>
             </div>
-        </div>
-    </div>
-</div>
-
-<!-- Modals -->
-<div id="tool-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center">
-    <div class="bg-white p-6 rounded w-1/3">
-        <h2 class="text-xl font-bold mb-4" id="tool-modal-title">Add New Tool</h2>
-        <input type="text" id="tool-id" placeholder="Tool ID" class="w-full p-2 border mb-2">
-        <input type="text" id="tool-name" placeholder="Tool Name" class="w-full p-2 border mb-2">
-        <input type="date" id="tool-cal-date" class="w-full p-2 border mb-2">
-        <select id="tool-status" class="w-full p-2 border mb-4">
-            <option value="Available">Available</option>
-            <option value="In Use">In Use</option>
-            <option value="Overdue">Overdue</option>
-            <option value="Under Maintenance">Under Maintenance</option>
-        </select>
-        <div class="flex justify-end space-x-2">
-            <button id="cancel-tool" class="px-3 py-1 bg-gray-300 rounded">Cancel</button>
-            <button id="save-tool" class="px-3 py-1 bg-blue-600 text-white rounded">Save</button>
-        </div>
-    </div>
-</div>
-
-<div id="user-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center">
-    <div class="bg-white p-6 rounded w-1/3">
-        <h2 class="text-xl font-bold mb-4" id="user-modal-title">Add New User</h2>
-        <input type="text" id="user-id" placeholder="User ID" class="w-full p-2 border mb-2">
-        <input type="text" id="user-name" placeholder="Full Name" class="w-full p-2 border mb-2">
-        <select id="user-role" class="w-full p-2 border mb-4">
-            <option value="Technician">Technician</option>
-            <option value="Supervisor">Supervisor</option>
-        </select>
-        <div class="flex justify-end space-x-2">
-            <button id="cancel-user" class="px-3 py-1 bg-gray-300 rounded">Cancel</button>
-            <button id="save-user" class="px-3 py-1 bg-blue-600 text-white rounded">Save</button>
-        </div>
-    </div>
-</div>
-
-<div id="emergency-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center">
-    <div class="bg-white p-6 rounded w-1/3">
-        <h2 class="text-xl font-bold mb-2 text-red-800">Emergency Manual Unlock</h2>
-        <p class="mb-4">This action will be logged. Please provide a reason.</p>
-        <textarea id="unlock-reason" placeholder="Reason for emergency unlock..." class="w-full p-2 border mb-4" rows="3"></textarea>
-        <div class="flex justify-end space-x-2">
-            <button id="cancel-emergency" class="px-3 py-1 bg-gray-300 rounded">Cancel</button>
-            <button id="confirm-emergency" class="px-3 py-1 bg-red-600 text-white rounded">Confirm Unlock</button>
-        </div>
-    </div>
-</div>
-
-<div id="tools-due-modal" class="modal-overlay">
-    <div class="modal-content">
-        <h2 class="text-xl font-bold mb-4">Tools Due on <span id="modal-date"></span></h2>
-        <ul id="tools-due-list" class="list-disc pl-5 space-y-1"></ul>
-        <button id="close-tools-modal" class="mt-4 bg-gray-600 text-white px-3 py-1 rounded">Close</button>
-    </div>
-</div>
-
-<script>
-// Global state
-let currentPage = 'dashboard';
-let allTools = [];
-let allUsers = [];
-let currentFilter = 'all';
-let currentSort = { column: 'id', direction: 'asc' };
-let currentYear = new Date().getFullYear();
-let currentMonth = new Date().getMonth() + 1;
-
-// === PAGE NAVIGATION ===
-document.querySelectorAll('[data-page]').forEach(link => {
-    link.addEventListener('click', (e) => {
-        e.preventDefault();
-        const page = e.target.dataset.page;
-        document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-        document.getElementById(`${page}-page`).classList.add('active');
-        document.querySelectorAll('.active-page').forEach(el => el.classList.remove('active-page'));
-        e.target.classList.add('active-page');
-        currentPage = page;
-        if (page === 'live-view') loadLiveView();
-        if (page === 'calibration') loadCalendar();
-        if (page === 'inventory') loadInventory();
-        if (page === 'users') loadUsers();
-        if (page === 'audit-trail') loadAuditTrail();
-    });
-});
-
-// === AI FORECAST BUTTON ===
-document.getElementById('ai-forecast-btn').addEventListener('click', async () => {
-    const btn = document.getElementById('ai-forecast-btn');
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Running...';
-    
-    const res = await fetch('/api/calibration/predict', { method: 'POST' });
-    const data = await res.json();
-    
-    if (res.ok) {
-        alert(`✅ ${data.message}!`);
-        if (currentPage === 'calibration') loadCalendar();
-        if (currentPage === 'inventory') loadInventory();
-    } else {
-        alert(`❌ Error: ${data.error || data.message}`);
-    }
-    
-    btn.disabled = false;
-    btn.innerHTML = '<i class="fas fa-robot mr-2"></i> Run AI Calibration Forecast';
-});
-
-// === DASHBOARD: Load KPIs & Alerts ===
-async function loadDashboard() {
-    const toolsRes = await fetch('/api/tools');
-    const tools = await toolsRes.json();
-    const counts = { 'Available': 0, 'In Use': 0, 'Overdue': 0, 'Under Maintenance': 0 };
-    tools.forEach(t => counts[t.status] = (counts[t.status] || 0) + 1);
-    document.getElementById('kpi-available').textContent = counts['Available'] || 0;
-    document.getElementById('kpi-in-use').textContent = counts['In Use'] || 0;
-    document.getElementById('kpi-overdue').textContent = counts['Overdue'] || 0;
-    document.getElementById('kpi-maintenance').textContent = counts['Under Maintenance'] || 0;
-
-    const alertsRes = await fetch('/api/alerts');
-    const alerts = await alertsRes.json();
-    const container = document.getElementById('alerts-container');
-    const noAlerts = document.getElementById('no-alerts');
-    container.innerHTML = '';
-    let hasAlerts = false;
-
-    alerts.overdue.forEach(tool => {
-        hasAlerts = true;
-        container.innerHTML += `
-            <div class="bg-yellow-100 border-l-4 border-yellow-500 p-3">
-                <strong>OVERDUE:</strong> ${tool.name} (${tool.id}) is past its calibration date.
+            <div class="flex justify-end gap-3 mt-8">
+                <button id="cancel-tool" class="px-5 py-2 rounded-lg text-slate-600 hover:bg-slate-100 font-medium">Cancel</button>
+                <button id="save-tool" class="px-5 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 font-medium shadow-lg shadow-blue-500/30">Save Tool</button>
             </div>
-        `;
-    });
+        </div>
+    </div>
 
-    alerts.long_checkout.forEach(tool => {
-        hasAlerts = true;
-        container.innerHTML += `
-            <div class="bg-red-100 border-l-4 border-red-500 p-3">
-                <strong>LONG CHECKOUT:</strong> ${tool.name} has been checked out for over 8 hours.
+    <div id="batch-modal" class="modal-overlay">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg p-6 border-t-4 border-yellow-400">
+            <h2 class="text-2xl font-bold text-slate-800 mb-2">Batch Edit</h2>
+            <p class="text-slate-500 mb-6 text-sm">You are updating <span id="batch-count" class="font-bold text-blue-600 text-lg">0</span> selected tools.</p>
+            
+            <div class="space-y-5">
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">New Status (Optional)</label>
+                    <select id="batch-status" class="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-yellow-500 outline-none bg-white">
+                        <option value="">-- Keep Current Status --</option>
+                        <option value="Available">Available (Clear Holder)</option>
+                        <option value="Under Maintenance">Under Maintenance</option>
+                        <option value="Overdue">Overdue</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">New Calibration Date (Optional)</label>
+                    <input type="date" id="batch-cal-date" class="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-yellow-500 outline-none">
+                </div>
             </div>
-        `;
-    });
-
-    noAlerts.style.display = hasAlerts ? 'none' : 'block';
-}
-
-// === ACTIVITY LOG ===
-async function loadActivityLog() {
-    const res = await fetch('/api/transactions');
-    const transactions = await res.json();
-    const logEl = document.getElementById('activity-log');
-    logEl.innerHTML = '';
-    transactions.forEach(tx => {
-        const color = tx.type === 'checkout' ? 'text-blue-600' : 'text-green-600';
-        logEl.innerHTML += `
-            <div class="flex justify-between border-b pb-1">
-                <span><span class="font-mono">${tx.tool_name}</span> was <span class="${color}">${tx.type}</span> by ${tx.user_name}</span>
-                <span class="text-gray-500 text-xs">${tx.timestamp}</span>
+            
+            <div class="flex justify-end gap-3 mt-8">
+                <button id="cancel-batch" class="px-5 py-2 rounded-lg text-slate-600 hover:bg-slate-100 font-medium">Cancel</button>
+                <button id="save-batch" class="px-5 py-2 rounded-lg bg-yellow-500 text-white hover:bg-yellow-600 font-medium shadow-lg shadow-yellow-500/30">Update All</button>
             </div>
-        `;
-    });
-}
+        </div>
+    </div>
 
-// === LIVE VIEW ===
-async function loadLiveView() {
-    const res = await fetch('/api/live-view');
-    const liveTools = await res.json();
-    const tableBody = document.getElementById('live-view-table-body');
-    const noToolsEl = document.getElementById('no-live-tools');
-    
-    tableBody.innerHTML = '';
-    
-    if (liveTools.length === 0) {
-        noToolsEl.classList.remove('hidden');
-        return;
-    }
-    
-    noToolsEl.classList.add('hidden');
-    
-    liveTools.forEach(tool => {
-        const totalSeconds = parseInt(tool.seconds_held);
-        const hours = Math.floor(totalSeconds / 3600);
-        const minutes = Math.floor((totalSeconds % 3600) / 60);
-        const seconds = totalSeconds % 60;
-        const timeHeld = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-        
-        let statusClass = 'bg-green-100 text-green-800';
-        if (tool.tool_status === 'Overdue') statusClass = 'bg-yellow-100 text-yellow-800';
-        if (tool.tool_status === 'In Use' && totalSeconds > 8 * 3600) {
-            statusClass = 'bg-red-100 text-red-800';
-        }
+    <div id="ai-review-modal" class="modal-overlay">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-4xl h-[80vh] flex flex-col">
+            <div class="p-6 border-b border-slate-100 flex justify-between items-center">
+                <h2 class="text-xl font-bold text-purple-800 flex items-center gap-2">
+                    <i class="fas fa-robot"></i> AI Calibration Insight
+                </h2>
+                <button id="close-ai-modal" class="text-slate-400 hover:text-slate-600 text-2xl">&times;</button>
+            </div>
+            
+            <div class="p-6 bg-purple-50 border-b border-purple-100">
+                <p class="text-purple-900 text-sm">
+                    <strong>Analysis Complete:</strong> The AI model has analyzed usage intensity (hours vs. checkouts) and identified the following tools that require earlier calibration to prevent potential failure.
+                </p>
+            </div>
 
-        const row = `
-            <tr class="border-b">
-                <td class="p-3 font-mono">${tool.tool_id}<br><span class="font-semibold">${tool.tool_name}</span></td>
-                <td class="p-3">${tool.user_name} (${tool.user_id})</td>
-                <td class="p-3"><span class="${statusClass} text-xs px-2 py-0.5 rounded">${tool.tool_status}</span></td>
-                <td class="p-3 font-mono">${timeHeld}</td>
-            </tr>
-        `;
-        tableBody.insertAdjacentHTML('beforeend', row);
-    });
-}
+            <div class="flex-1 overflow-y-auto p-0">
+                <table class="min-w-full divide-y divide-slate-200">
+                    <thead class="bg-slate-50 sticky top-0 z-10">
+                        <tr>
+                            <th class="px-6 py-3 text-left w-12"><input type="checkbox" id="select-all-ai" checked class="w-4 h-4 rounded text-purple-600 focus:ring-purple-500"></th>
+                            <th class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase">Tool</th>
+                            <th class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase">Current Due</th>
+                            <th class="px-6 py-3 text-left text-xs font-bold text-purple-600 uppercase">Recommended</th>
+                            <th class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase">Reasoning</th>
+                        </tr>
+                    </thead>
+                    <tbody id="ai-proposal-body" class="bg-white divide-y divide-slate-100">
+                        </tbody>
+                </table>
+            </div>
 
-// === AUDIT TRAIL ===
-let allAuditLogs = [];
+            <div class="p-6 border-t border-slate-100 flex justify-end gap-3 bg-slate-50 rounded-b-xl">
+                <button id="cancel-ai" class="px-5 py-2 rounded-lg text-slate-600 hover:bg-white hover:shadow transition font-medium">Ignore Recommendations</button>
+                <button id="approve-ai" class="px-6 py-2 rounded-lg bg-purple-600 text-white hover:bg-purple-700 font-bold shadow-lg shadow-purple-500/30 transition">Approve & Update Dates</button>
+            </div>
+        </div>
+    </div>
 
-async function loadAuditTrail() {
-    const res = await fetch('/api/audit-trail');
-    allAuditLogs = await res.json();
-    renderAuditTable();
-}
+    <div id="user-modal" class="modal-overlay">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
+            <h2 class="text-2xl font-bold text-slate-800 mb-6" id="user-modal-title">Add User</h2>
+            <div class="space-y-4">
+                <input type="text" id="user-id" placeholder="User ID (e.g. USR-005)" class="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                <input type="text" id="user-name" placeholder="Full Name" class="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                <select id="user-role" class="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white">
+                    <option value="Technician">Technician</option>
+                    <option value="Supervisor">Supervisor</option>
+                </select>
+            </div>
+            <div class="flex justify-end gap-3 mt-8">
+                <button id="cancel-user" class="px-5 py-2 rounded-lg text-slate-600 hover:bg-slate-100 font-medium">Cancel</button>
+                <button id="save-user" class="px-5 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 font-medium shadow">Save User</button>
+            </div>
+        </div>
+    </div>
 
-function renderAuditTable(filters = {}) {
-    const tableBody = document.getElementById('audit-table-body');
-    const noLogsEl = document.getElementById('no-audit-logs');
-    
-    let filteredLogs = allAuditLogs;
-    
-    if (filters.search) {
-        const term = filters.search.toLowerCase();
-        filteredLogs = filteredLogs.filter(log => 
-            (log.details && log.details.toLowerCase().includes(term)) ||
-            (log.action && log.action.toLowerCase().includes(term))
-        );
-    }
-    
-    if (filters.action) {
-        filteredLogs = filteredLogs.filter(log => log.action === filters.action);
-    }
-    
-    tableBody.innerHTML = '';
-    
-    if (filteredLogs.length === 0) {
-        noLogsEl.classList.remove('hidden');
-        return;
-    }
-    
-    noLogsEl.classList.add('hidden');
-    
-    filteredLogs.forEach(log => {
-        let detailsText = log.details || '—';
-        try {
-            const detailsObj = JSON.parse(log.details);
-            detailsText = Object.entries(detailsObj)
-                .map(([k, v]) => `${k}: ${v}`)
-                .join(', ');
-        } catch (e) {
-            // Keep as plain text
-        }
-        
-        const row = `
-            <tr class="border-b text-sm">
-                <td class="p-3 font-mono">${log.timestamp}</td>
-                <td class="p-3">${log.user_name || log.user_id || 'System'}</td>
-                <td class="p-3"><span class="bg-gray-100 px-2 py-0.5 rounded">${log.action}</span></td>
-                <td class="p-3 max-w-xs truncate">${detailsText}</td>
-            </tr>
-        `;
-        tableBody.insertAdjacentHTML('beforeend', row);
-    });
-}
+    <div id="emergency-modal" class="modal-overlay">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg p-6 border-l-8 border-red-600">
+            <h2 class="text-2xl font-bold text-red-700 mb-2">Emergency Override</h2>
+            <p class="text-slate-600 mb-6 text-sm">This action will force the solenoid lock open immediately. This event is logged permanently in the audit trail for compliance review.</p>
+            
+            <textarea id="unlock-reason" placeholder="Reason for forced entry is required..." class="w-full p-4 border border-slate-300 rounded-lg focus:ring-2 focus:ring-red-500 outline-none h-32 text-sm resize-none"></textarea>
+            
+            <div class="flex justify-end gap-3 mt-6">
+                <button id="cancel-emergency" class="px-5 py-2 rounded-lg text-slate-600 hover:bg-slate-100 font-medium">Cancel</button>
+                <button id="confirm-emergency" class="px-6 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 font-bold shadow-lg shadow-red-500/30">CONFIRM UNLOCK</button>
+            </div>
+        </div>
+    </div>
 
-document.getElementById('audit-apply-filters').addEventListener('click', () => {
-    const search = document.getElementById('audit-search').value;
-    const action = document.getElementById('audit-action-filter').value;
-    renderAuditTable({ search, action });
-});
+    <script>
+        // === GLOBAL STATE ===
+        let currentPage = 'dashboard';
+        let allTools = [];
+        let allUsers = [];
+        let currentFilter = 'all';
+        let currentSort = { column: 'id', direction: 'asc' };
+        let currentYear = new Date().getFullYear();
+        let currentMonth = new Date().getMonth() + 1;
+        let selectedToolIds = new Set();
+        let auditInterval = null;
+        let currentProposals = [];
 
-// === INVENTORY: Filtering & Sorting ===
-async function loadInventory() {
-    const response = await fetch('/api/tools');
-    allTools = await response.json();
-    renderInventoryTable();
-}
-
-function renderInventoryTable() {
-    const tableBody = document.getElementById('inventory-table-body');
-    tableBody.innerHTML = '';
-
-    let filteredTools = allTools;
-    if (currentFilter !== 'all') {
-        filteredTools = allTools.filter(tool => tool.status === currentFilter);
-    }
-
-    filteredTools.sort((a, b) => {
-        let valA = a[currentSort.column] || '';
-        let valB = b[currentSort.column] || '';
-        if (currentSort.column === 'calibration_due') {
-            valA = new Date(valA);
-            valB = new Date(valB);
-        }
-        if (typeof valA === 'string') {
-            valA = valA.toLowerCase();
-            valB = valB.toLowerCase();
-        }
-        let comparison = 0;
-        if (valA > valB) comparison = 1;
-        else if (valA < valB) comparison = -1;
-        return currentSort.direction === 'asc' ? comparison : -comparison;
-    });
-
-    filteredTools.forEach(tool => {
-        let statusClass = 'bg-green-100 text-green-800';
-        if (tool.status === 'In Use') statusClass = 'bg-red-100 text-red-800';
-        if (tool.status === 'Overdue') statusClass = 'bg-yellow-100 text-yellow-800';
-        if (tool.status === 'Under Maintenance') statusClass = 'bg-gray-100 text-gray-800';
-
-        const row = `
-            <tr>
-                <td class="p-3 font-mono">${tool.id}</td>
-                <td class="p-3 font-semibold">${tool.name}</td>
-                <td class="p-3 text-center"><span class="${statusClass} text-xs px-2 py-0.5 rounded">${tool.status}</span></td>
-                <td class="p-3">${tool.current_holder || '—'}</td>
-                <td class="p-3">${tool.calibration_due}</td>
-                <td class="p-3 text-center">
-                    <button class="edit-tool text-blue-600 hover:underline mr-2" data-id="${tool.id}">Edit</button>
-                    <button class="delete-tool text-red-600 hover:underline" data-id="${tool.id}">Delete</button>
-                </td>
-            </tr>
-        `;
-        tableBody.insertAdjacentHTML('beforeend', row);
-    });
-
-    document.querySelectorAll('.edit-tool').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const id = btn.dataset.id;
-            const tool = allTools.find(t => t.id === id);
-            document.getElementById('tool-modal-title').textContent = 'Edit Tool';
-            document.getElementById('tool-id').value = tool.id;
-            document.getElementById('tool-id').disabled = true;
-            document.getElementById('tool-name').value = tool.name;
-            document.getElementById('tool-cal-date').value = tool.calibration_due;
-            document.getElementById('tool-status').value = tool.status;
-            document.getElementById('tool-modal').classList.remove('hidden');
+        // === NAVIGATION & INITIALIZATION ===
+        document.addEventListener('DOMContentLoaded', () => {
+            // Load default page data
+            loadDashboard();
+            
+            // Set global dashboard refresh
+            setInterval(loadDashboard, 30000); // 30s refresh for KPIs
         });
-    });
 
-    document.querySelectorAll('.delete-tool').forEach(btn => {
-        btn.addEventListener('click', async () => {
-            if (confirm('Delete this tool?')) {
-                const id = btn.dataset.id;
-                await fetch(`/api/tools/${id}`, { method: 'DELETE' });
-                loadInventory();
+        document.querySelectorAll('[data-page]').forEach(link => {
+            link.addEventListener('click', (e) => {
+                e.preventDefault();
+                const page = e.currentTarget.dataset.page;
+
+                // 1. Update Sidebar UI
+                document.querySelectorAll('.active-page').forEach(el => {
+                    el.classList.remove('active-page', 'border-blue-500', 'bg-slate-800');
+                    el.classList.add('border-transparent');
+                });
+                e.currentTarget.classList.add('active-page', 'border-blue-500', 'bg-slate-800');
+                e.currentTarget.classList.remove('border-transparent');
+
+                // 2. Swap Content
+                document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+                document.getElementById(`${page}-page`).classList.add('active');
+
+                // 3. Manage Intervals (Clean up audit polling if leaving page)
+                if (auditInterval) {
+                    clearInterval(auditInterval);
+                    auditInterval = null;
+                }
+
+                // 4. Load Data for specific page
+                currentPage = page;
+                if (page === 'live-view') loadLiveView();
+                if (page === 'calibration') { loadInventory().then(loadCalendar); }
+                if (page === 'inventory') loadInventory();
+                if (page === 'users') loadUsers();
+                if (page === 'audit-trail') {
+                    loadAuditTrail();
+                    // Auto-refresh Audit Trail every 5 seconds
+                    auditInterval = setInterval(loadAuditTrail, 5000); 
+                }
+            });
+        });
+
+        // === FEATURE 1: DASHBOARD & SMART ALERTS ===
+        async function loadDashboard() {
+            // Fetch latest data
+            const toolsRes = await fetch('/api/tools');
+            const tools = await toolsRes.json();
+            
+            // Update KPIs
+            const counts = { 'Available': 0, 'In Use': 0, 'Overdue': 0, 'Under Maintenance': 0 };
+            tools.forEach(t => counts[t.status] = (counts[t.status] || 0) + 1);
+            
+            document.getElementById('kpi-available').textContent = counts['Available'] || 0;
+            document.getElementById('kpi-in-use').textContent = counts['In Use'] || 0;
+            document.getElementById('kpi-overdue').textContent = counts['Overdue'] || 0;
+            document.getElementById('kpi-maintenance').textContent = counts['Under Maintenance'] || 0;
+
+            // Update Alerts
+            const alertsRes = await fetch('/api/alerts');
+            const alerts = await alertsRes.json();
+            const container = document.getElementById('alerts-container');
+            const noAlerts = document.getElementById('no-alerts');
+            
+            container.innerHTML = '';
+            let hasAlerts = false;
+
+            // Render Overdue Alerts
+            alerts.overdue.forEach(tool => {
+                hasAlerts = true;
+                container.innerHTML += `
+                    <div class="bg-red-50 border-l-4 border-red-500 p-3 rounded shadow-sm text-sm">
+                        <div class="font-bold text-red-800">OVERDUE CALIBRATION</div>
+                        <div class="text-red-600">${tool.name} (${tool.id}) expired on ${tool.calibration_due}</div>
+                    </div>
+                `;
+            });
+
+            // Render Long Checkout Alerts
+            alerts.long_checkout.forEach(tool => {
+                hasAlerts = true;
+                container.innerHTML += `
+                    <div class="bg-orange-50 border-l-4 border-orange-500 p-3 rounded shadow-sm text-sm">
+                        <div class="font-bold text-orange-800">LONG CHECKOUT (>8 Hours)</div>
+                        <div class="text-orange-700">${tool.name} held by ${tool.current_holder}</div>
+                    </div>
+                `;
+            });
+
+            noAlerts.style.display = hasAlerts ? 'none' : 'block';
+            
+            // Silent AI Check ("The Nudge")
+            checkAiRecommendations();
+            
+            // Recent Activity
+            loadActivityLog();
+        }
+
+        async function loadActivityLog() {
+            const res = await fetch('/api/transactions');
+            const transactions = await res.json();
+            const logEl = document.getElementById('activity-log');
+            logEl.innerHTML = '';
+            transactions.forEach(tx => {
+                const badgeClass = tx.type === 'checkout' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800';
+                logEl.innerHTML += `
+                    <div class="flex justify-between items-center border-b border-slate-100 pb-2 last:border-0">
+                        <div>
+                            <span class="text-xs font-bold uppercase px-2 py-0.5 rounded ${badgeClass} mr-2">${tx.type}</span>
+                            <span class="font-medium text-slate-700">${tx.tool_name}</span>
+                            <span class="text-slate-400 text-xs ml-1">by ${tx.user_name}</span>
+                        </div>
+                        <span class="text-xs text-slate-400 font-mono">${tx.timestamp.split(' ')[1]}</span>
+                    </div>
+                `;
+            });
+        }
+
+        // === FEATURE 2: PASSIVE AI & PREDICTION ===
+        async function checkAiRecommendations() {
+            const btn = document.getElementById('ai-forecast-btn');
+            // Reset button style
+            btn.classList.remove('ring-4', 'ring-purple-200', 'border-purple-500');
+            btn.querySelector('span').textContent = 'Run AI Calibration Forecast';
+
+            try {
+                // Dry run - don't show modal, just check count
+                const res = await fetch('/api/calibration/predict', { method: 'POST' });
+                const data = await res.json();
+
+                if (data.status === 'success' && data.proposals.length > 0) {
+                    // Activate "Nudge" styles
+                    btn.classList.add('ring-4', 'ring-purple-200', 'border-purple-500');
+                    btn.querySelector('span').innerHTML = `<span class="font-bold text-purple-700">Review ${data.proposals.length} Recommendations</span>`;
+                    
+                    // Add to alerts list as well
+                    const container = document.getElementById('alerts-container');
+                    document.getElementById('no-alerts').style.display = 'none';
+                    container.innerHTML = `
+                        <div class="bg-purple-50 border-l-4 border-purple-500 p-3 rounded shadow-sm text-sm cursor-pointer hover:bg-purple-100 transition" onclick="document.getElementById('ai-forecast-btn').click()">
+                            <div class="font-bold text-purple-800 flex items-center"><i class="fas fa-robot mr-2"></i> AI INSIGHT</div>
+                            <div class="text-purple-700">${data.proposals.length} tools flagged for early calibration. Click to review.</div>
+                        </div>
+                    ` + container.innerHTML;
+                }
+            } catch (e) {
+                console.log("Silent AI check skipped.");
+            }
+        }
+
+        // Active AI Click Handler
+        document.getElementById('ai-forecast-btn').addEventListener('click', async () => {
+            const btn = document.getElementById('ai-forecast-btn');
+            const originalText = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-circle-notch fa-spin mr-2"></i> Analyzing...';
+            
+            try {
+                const res = await fetch('/api/calibration/predict', { method: 'POST' });
+                const data = await res.json();
+                
+                if (data.status === 'error') {
+                    alert(`AI Error: ${data.message}`);
+                } else if (data.proposals.length === 0) {
+                    alert("✅ AI Analysis: No optimized schedules found based on current usage data.");
+                } else {
+                    showAiReviewModal(data.proposals);
+                }
+            } catch (e) {
+                alert("Network error running analysis.");
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
             }
         });
-    });
-}
 
-document.querySelectorAll('.filter-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        currentFilter = btn.dataset.status;
-        renderInventoryTable();
-    });
-});
-
-document.querySelectorAll('.sort-header').forEach(header => {
-    header.addEventListener('click', () => {
-        const column = header.dataset.column;
-        if (currentSort.column === column) {
-            currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
-        } else {
-            currentSort.column = column;
-            currentSort.direction = 'asc';
+        function showAiReviewModal(proposals) {
+            currentProposals = proposals;
+            const tbody = document.getElementById('ai-proposal-body');
+            tbody.innerHTML = '';
+            
+            proposals.forEach((p, index) => {
+                tbody.innerHTML += `
+                    <tr class="hover:bg-purple-50 transition">
+                        <td class="px-6 py-4"><input type="checkbox" class="ai-checkbox w-4 h-4 rounded text-purple-600 focus:ring-purple-500 cursor-pointer" checked data-index="${index}"></td>
+                        <td class="px-6 py-4 text-sm font-bold text-slate-700">${p.tool_name} <div class="text-xs text-slate-400 font-normal">${p.tool_id}</div></td>
+                        <td class="px-6 py-4 text-sm text-slate-500">${p.current_date}</td>
+                        <td class="px-6 py-4 text-sm font-bold text-purple-600 flex items-center gap-2">${p.recommended_date} <i class="fas fa-arrow-left"></i></td>
+                        <td class="px-6 py-4 text-sm text-slate-600 italic bg-slate-50">${p.reason}</td>
+                    </tr>
+                `;
+            });
+            document.getElementById('ai-review-modal').style.display = 'flex';
         }
-        document.querySelectorAll('.sort-arrow').forEach(arrow => arrow.textContent = '');
-        header.querySelector('.sort-arrow').textContent = currentSort.direction === 'asc' ? ' ↑' : ' ↓';
-        renderInventoryTable();
-    });
-});
 
-// === USERS ===
-async function loadUsers() {
-    const response = await fetch('/api/users');
-    allUsers = await response.json();
-    const tableBody = document.getElementById('users-table-body');
-    tableBody.innerHTML = '';
-    allUsers.forEach(user => {
-        const row = `
-            <tr>
-                <td class="p-3 font-mono">${user.id}</td>
-                <td class="p-3">${user.name}</td>
-                <td class="p-3">${user.role}</td>
-                <td class="p-3">
-                    <button class="edit-user text-blue-600 hover:underline mr-2" data-id="${user.id}">Edit</button>
-                    <button class="delete-user text-red-600 hover:underline" data-id="${user.id}">Delete</button>
-                </td>
-            </tr>
-        `;
-        tableBody.insertAdjacentHTML('beforeend', row);
-    });
-
-    document.querySelectorAll('.edit-user').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const id = btn.dataset.id;
-            const user = allUsers.find(u => u.id === id);
-            document.getElementById('user-modal-title').textContent = 'Edit User';
-            document.getElementById('user-id').value = user.id;
-            document.getElementById('user-id').disabled = true;
-            document.getElementById('user-name').value = user.name;
-            document.getElementById('user-role').value = user.role;
-            document.getElementById('user-modal').classList.remove('hidden');
-        });
-    });
-
-    document.querySelectorAll('.delete-user').forEach(btn => {
-        btn.addEventListener('click', async () => {
-            if (confirm('Delete this user?')) {
-                const id = btn.dataset.id;
-                await fetch(`/api/users/${id}`, { method: 'DELETE' });
-                loadUsers();
+        document.getElementById('approve-ai').addEventListener('click', async () => {
+            const selectedIndices = Array.from(document.querySelectorAll('.ai-checkbox:checked')).map(cb => cb.dataset.index);
+            
+            if (selectedIndices.length === 0) {
+                alert("Select at least one proposal to approve.");
+                return;
             }
+
+            const updates = selectedIndices.map(i => ({
+                tool_id: currentProposals[i].tool_id,
+                new_date: currentProposals[i].recommended_date
+            }));
+
+            const btn = document.getElementById('approve-ai');
+            btn.innerText = 'Applying Updates...';
+            
+            await fetch('/api/calibration/apply', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ updates })
+            });
+            
+            alert(`✅ Successfully updated ${updates.length} tools.`);
+            document.getElementById('ai-review-modal').style.display = 'none';
+            btn.innerText = 'Approve Selected';
+            
+            loadDashboard(); // Refresh alerts
+            loadInventory(); // Refresh table
         });
-    });
-}
 
-// === CALENDAR ===
-function getDaysInMonth(year, month) {
-    return new Date(year, month, 0).getDate();
-}
+        // Modal Closers
+        document.getElementById('close-ai-modal').onclick = () => document.getElementById('ai-review-modal').style.display = 'none';
+        document.getElementById('cancel-ai').onclick = () => document.getElementById('ai-review-modal').style.display = 'none';
 
-function getFirstDayOfMonth(year, month) {
-    return new Date(year, month - 1, 1).getDay();
-}
 
-let currentMonthEvents = {};
+        // === FEATURE 3: LIVE VIEW ===
+        async function loadLiveView() {
+            const res = await fetch('/api/live-view');
+            const liveTools = await res.json();
+            const tableBody = document.getElementById('live-view-table-body');
+            
+            tableBody.innerHTML = '';
+            if (liveTools.length === 0) {
+                document.getElementById('no-live-tools').classList.remove('hidden');
+                return;
+            }
+            document.getElementById('no-live-tools').classList.add('hidden');
+            
+            liveTools.forEach(tool => {
+                const h = Math.floor(tool.seconds_held / 3600).toString().padStart(2,'0');
+                const m = Math.floor((tool.seconds_held % 3600) / 60).toString().padStart(2,'0');
+                const s = Math.floor(tool.seconds_held % 60).toString().padStart(2,'0');
+                
+                let statusBadge = tool.tool_status === 'Overdue' 
+                    ? '<span class="px-2 py-1 rounded-full bg-red-100 text-red-700 text-xs font-bold">Overdue</span>'
+                    : '<span class="px-2 py-1 rounded-full bg-green-100 text-green-700 text-xs font-bold">Active</span>';
 
-async function loadCalendar() {
-    const monthNames = ["January", "February", "March", "April", "May", "June",
-        "July", "August", "September", "October", "November", "December"];
-    document.getElementById('calendar-month').textContent = `${monthNames[currentMonth - 1]} ${currentYear}`;
-
-    const res = await fetch(`/api/calibration/events?year=${currentYear}&month=${currentMonth}`);
-    const events = await res.json();
-    currentMonthEvents = events;
-
-    const grid = document.getElementById('calendar-grid');
-    grid.innerHTML = `
-        <div class="text-center font-bold p-2">Sun</div>
-        <div class="text-center font-bold p-2">Mon</div>
-        <div class="text-center font-bold p-2">Tue</div>
-        <div class="text-center font-bold p-2">Wed</div>
-        <div class="text-center font-bold p-2">Thu</div>
-        <div class="text-center font-bold p-2">Fri</div>
-        <div class="text-center font-bold p-2">Sat</div>
-    `;
-
-    const daysInMonth = getDaysInMonth(currentYear, currentMonth);
-    const firstDay = getFirstDayOfMonth(currentYear, currentMonth);
-
-    for (let i = 0; i < firstDay; i++) {
-        grid.innerHTML += '<div class="p-2 border"></div>';
-    }
-
-    for (let day = 1; day <= daysInMonth; day++) {
-        const dateStr = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-        const count = events[dateStr] || 0;
-        const bubble = count > 0 ? `<div class="w-6 h-6 bg-blue-500 text-white text-xs rounded-full flex items-center justify-center mx-auto">${count}</div>` : '';
-        grid.innerHTML += `
-            <div class="p-2 border text-center calendar-day" data-date="${dateStr}">
-                <div>${day}</div>
-                ${bubble}
-            </div>
-        `;
-    }
-
-    document.querySelectorAll('.calendar-day').forEach(dayEl => {
-        const date = dayEl.dataset.date;
-        if (currentMonthEvents[date] && currentMonthEvents[date] > 0) {
-            dayEl.style.cursor = 'pointer';
-            dayEl.style.backgroundColor = '#dbeafe';
-            dayEl.addEventListener('click', () => showToolsDueOnDate(date));
+                tableBody.innerHTML += `
+                    <tr>
+                        <td class="px-6 py-4"><div class="font-bold text-slate-700">${tool.tool_name}</div><div class="text-xs text-slate-400 font-mono">${tool.tool_id}</div></td>
+                        <td class="px-6 py-4 text-sm text-slate-600">${tool.user_name} <span class="text-xs text-slate-400">(${tool.user_id})</span></td>
+                        <td class="px-6 py-4">${statusBadge}</td>
+                        <td class="px-6 py-4 font-mono text-slate-700 font-bold">${h}:${m}:${s}</td>
+                    </tr>
+                `;
+            });
         }
-    });
-}
 
-async function showToolsDueOnDate(date) {
-    const toolsRes = await fetch('/api/tools');
-    const tools = await toolsRes.json();
-    const toolsDue = tools.filter(tool => tool.calibration_due === date);
+        // === FEATURE 4: INVENTORY & BATCH EDIT ===
+        async function loadInventory() {
+            const response = await fetch('/api/tools');
+            allTools = await response.json();
+            renderInventoryTable();
+        }
 
-    document.getElementById('modal-date').textContent = date;
-    const listEl = document.getElementById('tools-due-list');
-    listEl.innerHTML = '';
-    if (toolsDue.length === 0) {
-        listEl.innerHTML = '<li>No tools found.</li>';
-    } else {
-        toolsDue.forEach(tool => {
-            const li = document.createElement('li');
-            li.textContent = `${tool.name} (${tool.id})`;
-            listEl.appendChild(li);
+        function renderInventoryTable() {
+            const tableBody = document.getElementById('inventory-table-body');
+            tableBody.innerHTML = '';
+            
+            // Reset UI
+            selectedToolIds.clear();
+            updateBatchUI();
+            document.getElementById('select-all-tools').checked = false;
+
+            // Filter
+            let filtered = currentFilter === 'all' ? allTools : allTools.filter(t => t.status === currentFilter);
+            
+            // Sort
+            filtered.sort((a, b) => {
+                let valA = a[currentSort.column];
+                let valB = b[currentSort.column];
+                return currentSort.direction === 'asc' ? (valA > valB ? 1 : -1) : (valA < valB ? 1 : -1);
+            });
+
+            filtered.forEach(t => {
+                let statusClass = '';
+                if (t.status === 'Available') statusClass = 'bg-green-100 text-green-700';
+                else if (t.status === 'In Use') statusClass = 'bg-blue-100 text-blue-700';
+                else if (t.status === 'Overdue') statusClass = 'bg-red-100 text-red-700';
+                else statusClass = 'bg-orange-100 text-orange-700';
+
+                tableBody.innerHTML += `
+                    <tr class="hover:bg-slate-50 transition">
+                        <td class="px-6 py-4 text-center"><input type="checkbox" class="tool-checkbox w-4 h-4 rounded text-blue-600 focus:ring-blue-500 cursor-pointer" value="${t.id}"></td>
+                        <td class="px-6 py-4 text-sm font-mono text-slate-500">${t.id}</td>
+                        <td class="px-6 py-4 text-sm font-bold text-slate-700">${t.name}</td>
+                        <td class="px-6 py-4"><span class="px-2 py-1 rounded-full text-xs font-bold ${statusClass}">${t.status}</span></td>
+                        <td class="px-6 py-4 text-sm text-slate-500">${t.current_holder || '-'}</td>
+                        <td class="px-6 py-4 text-sm text-slate-600 font-medium">${t.calibration_due}</td>
+                        <td class="px-6 py-4 text-center">
+                            <button class="edit-tool text-blue-600 hover:text-blue-800 mr-3 font-medium text-sm" data-id="${t.id}">Edit</button>
+                            <button class="delete-tool text-red-500 hover:text-red-700 font-medium text-sm" data-id="${t.id}">Delete</button>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            attachToolListeners();
+        }
+
+        function attachToolListeners() {
+            // Checkboxes
+            document.querySelectorAll('.tool-checkbox').forEach(box => {
+                box.addEventListener('change', (e) => {
+                    e.target.checked ? selectedToolIds.add(e.target.value) : selectedToolIds.delete(e.target.value);
+                    updateBatchUI();
+                });
+            });
+
+            // Edit Single
+            document.querySelectorAll('.edit-tool').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const t = allTools.find(tool => tool.id === btn.dataset.id);
+                    document.getElementById('tool-id').value = t.id;
+                    document.getElementById('tool-id').disabled = true;
+                    document.getElementById('tool-name').value = t.name;
+                    document.getElementById('tool-cal-date').value = t.calibration_due;
+                    document.getElementById('tool-status').value = t.status;
+                    document.getElementById('tool-modal').style.display = 'flex';
+                });
+            });
+
+            // Delete Single
+            document.querySelectorAll('.delete-tool').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    if(confirm('Are you sure you want to delete this tool?')) {
+                        await fetch(`/api/tools/${btn.dataset.id}`, { method: 'DELETE' });
+                        loadInventory();
+                    }
+                });
+            });
+        }
+
+        // Batch Logic
+        document.getElementById('select-all-tools').addEventListener('change', (e) => {
+            document.querySelectorAll('.tool-checkbox').forEach(box => {
+                box.checked = e.target.checked;
+                e.target.checked ? selectedToolIds.add(box.value) : selectedToolIds.delete(box.value);
+            });
+            updateBatchUI();
         });
-    }
-    document.getElementById('tools-due-modal').style.display = 'flex';
-}
 
-document.getElementById('close-tools-modal').addEventListener('click', () => {
-    document.getElementById('tools-due-modal').style.display = 'none';
-});
+        function updateBatchUI() {
+            const count = selectedToolIds.size;
+            document.getElementById('selected-count').innerText = count;
+            if(count > 0) document.getElementById('batch-edit-btn').classList.remove('hidden');
+            else document.getElementById('batch-edit-btn').classList.add('hidden');
+        }
 
-document.getElementById('tools-due-modal').addEventListener('click', (e) => {
-    if (e.target.id === 'tools-due-modal') {
-        document.getElementById('tools-due-modal').style.display = 'none';
-    }
-});
+        document.getElementById('batch-edit-btn').onclick = () => document.getElementById('batch-modal').style.display = 'flex';
+        document.getElementById('cancel-batch').onclick = () => document.getElementById('batch-modal').style.display = 'none';
+        
+        document.getElementById('save-batch').onclick = async () => {
+            const updates = {};
+            if(document.getElementById('batch-status').value) updates.status = document.getElementById('batch-status').value;
+            if(document.getElementById('batch-cal-date').value) updates.calibration_due = document.getElementById('batch-cal-date').value;
+            
+            await fetch('/api/tools/batch', {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ tool_ids: Array.from(selectedToolIds), updates })
+            });
+            document.getElementById('batch-modal').style.display = 'none';
+            loadInventory();
+        };
 
-document.getElementById('prev-month').addEventListener('click', () => {
-    if (currentMonth === 1) {
-        currentMonth = 12;
-        currentYear--;
-    } else {
-        currentMonth--;
-    }
-    loadCalendar();
-});
+        // Single Tool Save
+        document.getElementById('add-tool-btn').onclick = () => {
+            document.getElementById('tool-id').disabled = false; 
+            document.getElementById('tool-id').value = '';
+            document.getElementById('tool-modal').style.display = 'flex';
+        };
+        document.getElementById('cancel-tool').onclick = () => document.getElementById('tool-modal').style.display = 'none';
+        
+        document.getElementById('save-tool').onclick = async () => {
+            const id = document.getElementById('tool-id').value;
+            const body = {
+                id: id,
+                name: document.getElementById('tool-name').value,
+                calibration_due: document.getElementById('tool-cal-date').value,
+                status: document.getElementById('tool-status').value
+            };
+            
+            const method = document.getElementById('tool-id').disabled ? 'PUT' : 'POST';
+            const url = document.getElementById('tool-id').disabled ? `/api/tools/${id}` : '/api/tools';
+            
+            await fetch(url, { method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+            
+            // If editing, handle status update separately (since PUT to /tools doesn't update status usually)
+            if(document.getElementById('tool-id').disabled) {
+                await fetch(`/api/tools/${id}/status`, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({status: body.status}) });
+            }
+            
+            document.getElementById('tool-modal').style.display = 'none';
+            loadInventory();
+        };
 
-document.getElementById('next-month').addEventListener('click', () => {
-    if (currentMonth === 12) {
-        currentMonth = 1;
-        currentYear++;
-    } else {
-        currentMonth++;
-    }
-    loadCalendar();
-});
-
-// === MODALS ===
-document.getElementById('add-tool-btn').addEventListener('click', () => {
-    document.getElementById('tool-modal-title').textContent = 'Add New Tool';
-    document.getElementById('tool-id').value = '';
-    document.getElementById('tool-id').disabled = false;
-    document.getElementById('tool-name').value = '';
-    document.getElementById('tool-cal-date').value = '';
-    document.getElementById('tool-status').value = 'Available';
-    document.getElementById('tool-modal').classList.remove('hidden');
-});
-
-document.getElementById('cancel-tool').addEventListener('click', () => {
-    document.getElementById('tool-modal').classList.add('hidden');
-});
-
-document.getElementById('save-tool').addEventListener('click', async () => {
-    const id = document.getElementById('tool-id').value;
-    const name = document.getElementById('tool-name').value;
-    const calDate = document.getElementById('tool-cal-date').value;
-    const status = document.getElementById('tool-status').value;
-    if (!id || !name || !calDate) {
-        alert('All fields are required.');
-        return;
-    }
-
-    if (document.getElementById('tool-id').disabled) {
-        await fetch(`/api/tools/${id}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, calibration_due: calDate })
+        // Filters
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.filter-btn').forEach(b => { b.classList.remove('active'); b.classList.remove('bg-slate-800', 'text-white'); b.classList.add('bg-white', 'text-slate-800'); });
+                btn.classList.add('active'); // CSS handles the color
+                currentFilter = btn.dataset.status;
+                renderInventoryTable();
+            });
         });
-        await fetch(`/api/tools/${id}/status`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status })
-        });
-    } else {
-        await fetch('/api/tools', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id, name, calibration_due: calDate })
-        });
-    }
-    document.getElementById('tool-modal').classList.add('hidden');
-    if (currentPage === 'inventory') loadInventory();
-});
 
-document.getElementById('add-user-btn').addEventListener('click', () => {
-    document.getElementById('user-modal-title').textContent = 'Add New User';
-    document.getElementById('user-id').value = '';
-    document.getElementById('user-id').disabled = false;
-    document.getElementById('user-name').value = '';
-    document.getElementById('user-role').value = 'Technician';
-    document.getElementById('user-modal').classList.remove('hidden');
-});
+        // === FEATURE 5: INTERACTIVE CALENDAR ===
+        async function loadCalendar() {
+            if (allTools.length === 0) await loadInventory(); // Ensure data
 
-document.getElementById('cancel-user').addEventListener('click', () => {
-    document.getElementById('user-modal').classList.add('hidden');
-});
+            const months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+            document.getElementById('calendar-month').innerText = `${months[currentMonth-1]} ${currentYear}`;
+            
+            const grid = document.getElementById('calendar-grid');
+            grid.innerHTML = '';
+            
+            const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
+            const firstDay = new Date(currentYear, currentMonth - 1, 1).getDay();
+            const today = new Date();
 
-document.getElementById('save-user').addEventListener('click', async () => {
-    const id = document.getElementById('user-id').value;
-    const name = document.getElementById('user-name').value;
-    const role = document.getElementById('user-role').value;
-    if (!id || !name || !role) {
-        alert('All fields are required.');
-        return;
-    }
-    const payload = { id, name, role };
-    const url = document.getElementById('user-id').disabled ? `/api/users/${id}` : '/api/users';
-    const method = document.getElementById('user-id').disabled ? 'PUT' : 'POST';
-    await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-    document.getElementById('user-modal').classList.add('hidden');
-    if (currentPage === 'users') loadUsers();
-});
+            // Empties
+            for(let i=0; i<firstDay; i++) grid.innerHTML += '<div class="bg-slate-50 min-h-[110px]"></div>';
 
-document.getElementById('emergency-btn').addEventListener('click', () => {
-    document.getElementById('emergency-modal').classList.remove('hidden');
-});
+            // Days
+            for(let day=1; day<=daysInMonth; day++) {
+                const dateStr = `${currentYear}-${String(currentMonth).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+                const dueTools = allTools.filter(t => t.calibration_due === dateStr);
+                
+                const isToday = (today.toDateString() === new Date(dateStr).toDateString());
+                const isPast = new Date(dateStr) < today && !isToday;
+                
+                let cellClass = isToday ? 'bg-yellow-50 border-2 border-yellow-300 z-10' : 'bg-white';
+                
+                let pills = '';
+                if (dueTools.length > 0) {
+                    // Determine pill color
+                    const colorClass = isPast ? 'bg-red-100 text-red-700 border border-red-200' : 'bg-blue-100 text-blue-700 border border-blue-200';
+                    
+                    dueTools.slice(0, 3).forEach(t => {
+                        pills += `<div class="cal-pill ${colorClass}" title="${t.name}">${t.id}</div>`;
+                    });
+                    if(dueTools.length > 3) {
+                        pills += `<div class="text-[10px] text-slate-400 pl-1">+${dueTools.length-3} more</div>`;
+                    }
+                }
 
-document.getElementById('cancel-emergency').addEventListener('click', () => {
-    document.getElementById('emergency-modal').classList.add('hidden');
-});
+                grid.innerHTML += `
+                    <div class="cal-day ${cellClass} p-2 flex flex-col cursor-pointer border border-transparent hover:border-blue-200" onclick="openDayModal('${dateStr}')">
+                        <div class="text-right text-xs font-bold mb-1 ${isToday ? 'text-blue-600' : 'text-slate-400'}">${day}</div>
+                        <div class="flex-1 flex flex-col gap-0.5 overflow-hidden">${pills}</div>
+                    </div>
+                `;
+            }
+        }
 
-document.getElementById('confirm-emergency').addEventListener('click', async () => {
-    const reason = document.getElementById('unlock-reason').value;
-    if (!reason) {
-        alert('Please provide a reason.');
-        return;
-    }
-    await fetch('/api/unlock/emergency', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason })
-    });
-    alert('Emergency unlock triggered!');
-    document.getElementById('emergency-modal').classList.add('hidden');
-});
+        window.openDayModal = (date) => {
+            const due = allTools.filter(t => t.calibration_due === date);
+            document.getElementById('modal-date').innerText = date;
+            const list = document.getElementById('tools-due-list');
+            list.innerHTML = '';
+            
+            if(due.length === 0) {
+                list.innerHTML = '<li class="text-slate-400 italic p-4 text-center">No tasks scheduled for this day.</li>';
+            } else {
+                due.forEach(t => {
+                    const color = t.status === 'Overdue' ? 'text-red-600' : 'text-slate-600';
+                    list.innerHTML += `
+                        <li class="flex justify-between items-center p-3 bg-slate-50 rounded border border-slate-100">
+                            <div>
+                                <div class="font-bold text-slate-700 text-sm">${t.name}</div>
+                                <div class="font-mono text-xs text-slate-400">${t.id}</div>
+                            </div>
+                            <div class="text-xs font-bold uppercase ${color}">${t.status}</div>
+                        </li>`;
+                });
+            }
+            document.getElementById('tools-due-modal').style.display = 'flex';
+        };
 
-// === INITIALIZE ON LOAD ===
-document.addEventListener('DOMContentLoaded', () => {
-    loadDashboard();
-    setInterval(loadDashboard, 30000);
-    loadActivityLog();
-    setInterval(loadActivityLog, 15000);
-    loadLiveView();
-    setInterval(loadLiveView, 10000);
-    loadInventory();
-    loadUsers();
-    loadCalendar();
-    loadAuditTrail();
-});
-</script>
+        document.getElementById('close-tools-modal').onclick = () => document.getElementById('tools-due-modal').style.display = 'none';
+        document.getElementById('jump-today-btn').onclick = () => {
+            const now = new Date(); currentMonth = now.getMonth()+1; currentYear = now.getFullYear();
+            loadCalendar();
+        };
+        document.getElementById('prev-month').onclick = () => {
+            if(currentMonth===1) { currentMonth=12; currentYear--; } else currentMonth--;
+            loadCalendar();
+        };
+        document.getElementById('next-month').onclick = () => {
+            if(currentMonth===12) { currentMonth=1; currentYear++; } else currentMonth++;
+            loadCalendar();
+        };
 
+        // === FEATURE 6: AUDIT TRAIL ===
+        async function loadAuditTrail() {
+            const search = document.getElementById('audit-search').value;
+            const action = document.getElementById('audit-action-filter').value;
+            
+            const url = `/api/audit-trail?search=${encodeURIComponent(search)}&action=${encodeURIComponent(action)}`;
+            const res = await fetch(url);
+            const logs = await res.json();
+            
+            const tb = document.getElementById('audit-table-body');
+            tb.innerHTML = '';
+            
+            if(logs.length === 0) {
+                document.getElementById('no-audit-logs').classList.remove('hidden');
+                return;
+            }
+            document.getElementById('no-audit-logs').classList.add('hidden');
+
+            logs.forEach(l => {
+                let det = l.details;
+                try {
+                    const d = JSON.parse(l.details);
+                    if (l.action === 'BATCH_UPDATE') det = `Modified ${d.count} tools`;
+                    else det = Object.entries(d).map(([k,v]) => `<span class="font-semibold text-slate-600">${k}:</span> ${v}`).join(' | ');
+                } catch(e) {}
+
+                tb.innerHTML += `
+                    <tr class="hover:bg-slate-50 transition">
+                        <td class="px-6 py-3 text-xs font-mono text-slate-500">${l.timestamp}</td>
+                        <td class="px-6 py-3 text-sm font-bold text-slate-700">${l.user_name || l.user_id || 'System'}</td>
+                        <td class="px-6 py-3"><span class="bg-slate-100 text-slate-600 px-2 py-1 rounded text-xs font-bold uppercase border border-slate-200">${l.action}</span></td>
+                        <td class="px-6 py-3 text-xs text-slate-500 truncate max-w-xs">${det}</td>
+                    </tr>
+                `;
+            });
+        }
+        document.getElementById('audit-apply-filters').onclick = loadAuditTrail;
+
+        // === USERS ===
+        async function loadUsers() {
+            const res = await fetch('/api/users');
+            allUsers = await res.json();
+            const tb = document.getElementById('users-table-body');
+            tb.innerHTML = '';
+            allUsers.forEach(u => {
+                tb.innerHTML += `
+                    <tr>
+                        <td class="px-6 py-4 text-sm font-mono text-slate-500">${u.id}</td>
+                        <td class="px-6 py-4 text-sm font-bold text-slate-700">${u.name}</td>
+                        <td class="px-6 py-4"><span class="bg-blue-50 text-blue-700 px-2 py-1 rounded text-xs font-bold uppercase">${u.role}</span></td>
+                        <td class="px-6 py-4 text-right">
+                            <button class="delete-user text-red-500 hover:text-red-700 text-sm font-medium" data-id="${u.id}">Remove</button>
+                        </td>
+                    </tr>`;
+            });
+            document.querySelectorAll('.delete-user').forEach(b => b.onclick = async () => {
+                if(confirm('Remove user?')) {
+                    await fetch(`/api/users/${b.dataset.id}`, {method:'DELETE'});
+                    loadUsers();
+                }
+            });
+        }
+        document.getElementById('add-user-btn').onclick = () => {
+            document.getElementById('user-id').value=''; document.getElementById('user-name').value='';
+            document.getElementById('user-modal').style.display = 'flex';
+        };
+        document.getElementById('cancel-user').onclick = () => document.getElementById('user-modal').style.display = 'none';
+        document.getElementById('save-user').onclick = async () => {
+            await fetch('/api/users', {
+                method: 'POST',
+                headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({
+                    id: document.getElementById('user-id').value,
+                    name: document.getElementById('user-name').value,
+                    role: document.getElementById('user-role').value
+                })
+            });
+            document.getElementById('user-modal').style.display = 'none';
+            loadUsers();
+        };
+
+        // === EMERGENCY ===
+        document.getElementById('emergency-btn').onclick = () => document.getElementById('emergency-modal').style.display = 'flex';
+        document.getElementById('cancel-emergency').onclick = () => document.getElementById('emergency-modal').style.display = 'none';
+        document.getElementById('confirm-emergency').onclick = async () => {
+            const reason = document.getElementById('unlock-reason').value;
+            if(!reason) { alert('Reason required'); return; }
+            await fetch('/api/unlock/emergency', {
+                method: 'POST', headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({reason})
+            });
+            alert('Unlock Command Sent');
+            document.getElementById('emergency-modal').style.display = 'none';
+        };
+
+    </script>
 </body>
 </html>

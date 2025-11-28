@@ -3,159 +3,129 @@ from flask import Flask, render_template, jsonify, request
 import sqlite3
 import json
 from datetime import datetime, timedelta
-import requests # Required for Telegram alerts via n8n
+import requests
 
 app = Flask(__name__)
 
 def get_db_connection():
-    """Establishes a connection to the SQLite database."""
     conn = sqlite3.connect('database.db')
-    conn.row_factory = sqlite3.Row # Allows access to columns by name
+    conn.row_factory = sqlite3.Row
     return conn
 
-# === AUDIT LOGGING HELPER (FIXED) ===
-def log_audit_event(user_id, action, details=""):
-    """
-    Logs an event to the audit_log table.
-    Ensures its own connection is opened and closed properly.
-    """
-    conn = get_db_connection()
+# Logger with Shared Connection Support
+def log_audit_event(user_id, action, details="", conn=None):
+    should_close = False
+    if conn is None:
+        conn = get_db_connection()
+        should_close = True
+    
     try:
         conn.execute('INSERT INTO audit_log (user_id, action, details) VALUES (?, ?, ?)',
                      (user_id, action, details))
-        conn.commit()
+        if should_close:
+            conn.commit()
     except Exception as e:
-        # Log the error if the audit log itself fails, but don't crash the main operation
         print(f"❌ ERROR: Failed to log audit event: {e}")
     finally:
-        conn.close() # Always close the connection
-
-
-# === TRIGGER OVERDUE ALERT VIA N8N (HANDLED GRACEFULLY) ===
-def trigger_overdue_alert(tool_id, user_id):
-    """
-    Calls the n8n webhook to send a Telegram/WhatsApp alert for overdue checkouts.
-    Gracefully handles n8n being unavailable.
-    """
-    conn = get_db_connection()
-    try:
-        # Fetch user and tool details for the alert message
-        user = conn.execute('SELECT name, contact_id FROM users WHERE id = ?', (user_id,)).fetchone()
-        tool = conn.execute('SELECT name FROM tools WHERE id = ?', (tool_id,)).fetchone()
-    except Exception as e:
-        print(f"❌ ERROR fetching data for alert: {e}")
-        return
-    finally:
-        conn.close()
-
-    if not user or not tool:
-        print(f"⚠️ Could not fetch user ({user_id}) or tool ({tool_id}) for alert.")
-        return
-
-    # Determine chat ID, defaulting to a placeholder if not set
-    chat_id = user["contact_id"] if user["contact_id"] else "DEFAULT_TELEGRAM_USER_ID_FOR_TESTING"
-    # IMPORTANT: Replace "DEFAULT_TELEGRAM_USER_ID_FOR_TESTING" with an actual ID or handle gracefully
-
-    payload = {
-        "technician_name": user["name"],
-        "tool_name": tool["name"],
-        "tool_id": tool_id,
-        "chat_id": chat_id
-    }
-
-    n8n_webhook_url = "http://localhost:5678/webhook/tool-overdue" # Update if n8n is on a different port/IP
-
-    try:
-        response = requests.post(n8n_webhook_url, json=payload, timeout=5)
-        if response.status_code == 200:
-            print(f"✅ Alert sent for tool {tool_id} to user {user_id} (chat_id: {chat_id})")
-        else:
-            print(f"❌ Alert failed with status {response.status_code}: {response.text}")
-    except requests.exceptions.ConnectionError:
-        # This handles the specific error you saw: n8n not running
-        print("❌ n8n alert failed: Connection refused. Is n8n running on localhost:5678?")
-    except Exception as e:
-        print(f"❌ n8n alert failed with unexpected error: {e}")
+        if should_close:
+            conn.close()
 
 # === UI ROUTES ===
 @app.route('/')
 def index():
-    """Serves the Supervisor Dashboard."""
     return render_template('supervisor_ui.html')
 
 @app.route('/station')
 def technician_station():
-    """Serves the Technician UI."""
     return render_template('technician_ui.html')
 
-# === TOOL MANAGEMENT (FR-IM) ===
-@app.route('/api/tools', methods=['GET', 'POST'])
-def manage_tools():
-    """
-    Handles fetching all tools (GET) and creating a new tool (POST).
-    Implements FR-IM-01, FR-IM-03.
-    """
+# === CORE API ENDPOINTS ===
+
+# --- Users Management ---
+@app.route('/api/users', methods=['GET'])
+def get_users():
     conn = get_db_connection()
     try:
-        if request.method == 'GET':
-            tools = conn.execute('SELECT * FROM tools').fetchall()
-            return jsonify([dict(row) for row in tools])
-
-        elif request.method == 'POST':
-            data = request.get_json()
-            if not data.get('id') or not data.get('name') or not data.get('calibration_due'):
-                return jsonify({'message': 'Missing required fields (id, name, calibration_due)'}), 400
-            try:
-                conn.execute('''
-                    INSERT INTO tools (id, name, status, current_holder, calibration_due, total_checkouts, total_usage_hours)
-                    VALUES (?, ?, 'Available', NULL, ?, 0, 0.0)
-                ''', (data['id'], data['name'], data['calibration_due']))
-                log_audit_event("SYSTEM", 'TOOL_CREATED', json.dumps(data))
-                conn.commit()
-                return jsonify({'message': 'Tool created successfully'}), 201
-            except sqlite3.IntegrityError:
-                return jsonify({'message': 'Tool ID already exists'}), 409
+        users = conn.execute('SELECT * FROM users').fetchall()
+        return jsonify([dict(row) for row in users])
     finally:
         conn.close()
 
-@app.route('/api/tools/<tool_id>', methods=['PUT', 'DELETE'])
-def update_delete_tool(tool_id):
-    """
-    Handles updating (PUT) or deleting (DELETE) a specific tool.
-    Implements FR-IM-03.
-    """
+@app.route('/api/users/<user_id>', methods=['GET'])
+def get_user(user_id):
     conn = get_db_connection()
     try:
-        if request.method == 'PUT':
-            data = request.get_json()
-            if not data.get('name') or not data.get('calibration_due'):
-                return jsonify({'message': 'Missing required fields (name, calibration_due)'}), 400
-            cur = conn.execute('''
-                UPDATE tools SET name = ?, calibration_due = ? WHERE id = ?
-            ''', (data['name'], data['calibration_due'], tool_id))
-            if cur.rowcount == 0:
-                return jsonify({'message': 'Tool not found'}), 404
-            log_audit_event("SYSTEM", 'TOOL_UPDATED', json.dumps({'tool_id': tool_id, **data}))
-            conn.commit()
-            return jsonify({'message': 'Tool updated'})
-
-        elif request.method == 'DELETE':
-            cur = conn.execute('DELETE FROM tools WHERE id = ?', (tool_id,))
-            if cur.rowcount == 0:
-                return jsonify({'message': 'Tool not found'}), 404
-            log_audit_event("SYSTEM", 'TOOL_DELETED', json.dumps({'tool_id': tool_id}))
-            conn.commit()
-            return jsonify({'message': 'Tool deleted'})
+        user = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
+        if user is None:
+            return jsonify({'error': 'User not found'}), 404
+        return jsonify(dict(user))
     finally:
         conn.close()
 
-# === NEW ROUTE: GET SINGLE TOOL DETAILS (FOR CHECKOUT VALIDATION) ===
-@app.route('/api/tools/<tool_id>')
+@app.route('/api/users', methods=['POST'])
+def create_user():
+    data = request.get_json()
+    conn = get_db_connection()
+    try:
+        conn.execute('INSERT INTO users (id, name, role, contact_id) VALUES (?, ?, ?, ?)',
+                     (data['id'], data['name'], data['role'], data.get('contact_id')))
+        log_audit_event('USR-001', 'USER_CREATED', json.dumps({'id': data['id'], 'role': data['role']}), conn=conn)
+        conn.commit()
+        return jsonify({'message': 'User created'}), 201
+    except sqlite3.IntegrityError:
+        return jsonify({'message': 'User ID already exists'}), 400
+    finally:
+        conn.close()
+
+@app.route('/api/users/<user_id>', methods=['PUT'])
+def update_user(user_id):
+    data = request.get_json()
+    conn = get_db_connection()
+    try:
+        conn.execute('UPDATE users SET name = ?, role = ? WHERE id = ?',
+                     (data['name'], data['role'], user_id))
+        log_audit_event('USR-001', 'USER_UPDATED', json.dumps({'user_id': user_id, 'updates': data}), conn=conn)
+        conn.commit()
+        return jsonify({'message': 'User updated'})
+    finally:
+        conn.close()
+
+@app.route('/api/users/<user_id>', methods=['DELETE'])
+def delete_user(user_id):
+    conn = get_db_connection()
+    try:
+        active_tools = conn.execute('SELECT count(*) FROM tools WHERE current_holder = ?', (user_id,)).fetchone()[0]
+        if active_tools > 0:
+            return jsonify({'message': 'Cannot delete user: They are currently holding tools.'}), 400
+
+        conn.execute('DELETE FROM users WHERE id = ?', (user_id,))
+        log_audit_event('USR-001', 'USER_DELETED', json.dumps({'user_id': user_id}), conn=conn)
+        conn.commit()
+        return jsonify({'message': 'User deleted'})
+    finally:
+        conn.close()
+
+# --- Tools Management ---
+@app.route('/api/tools', methods=['GET'])
+def get_tools():
+    conn = get_db_connection()
+    try:
+        tools = conn.execute('SELECT * FROM tools').fetchall()
+        return jsonify([dict(row) for row in tools])
+    finally:
+        conn.close()
+
+@app.route('/api/tools/available', methods=['GET'])
+def get_available_tools():
+    conn = get_db_connection()
+    try:
+        tools = conn.execute("SELECT * FROM tools WHERE status = 'Available'").fetchall()
+        return jsonify([dict(row) for row in tools])
+    finally:
+        conn.close()
+
+@app.route('/api/tools/<tool_id>', methods=['GET'])
 def get_single_tool(tool_id):
-    """
-    Retrieves details for a specific tool.
-    Used by Technician UI before checkout to re-validate status.
-    """
     conn = get_db_connection()
     try:
         tool = conn.execute('SELECT * FROM tools WHERE id = ?', (tool_id,)).fetchone()
@@ -165,113 +135,146 @@ def get_single_tool(tool_id):
     finally:
         conn.close()
 
-# === NEW ROUTE: GET AVAILABLE TOOLS (FOR TECHNICIAN UI) ===
-@app.route('/api/tools/available')
-def get_available_tools():
-    """
-    Retrieves tools with status 'Available'.
-    Used by Technician UI to populate the tool selection grid.
-    """
+@app.route('/api/tools', methods=['POST'])
+def create_tool():
+    data = request.get_json()
+    status = data.get('status', 'Available')
     conn = get_db_connection()
     try:
-        tools = conn.execute('SELECT * FROM tools WHERE status = "Available"').fetchall()
-        return jsonify([dict(row) for row in tools])
+        conn.execute('INSERT INTO tools (id, name, status, calibration_due) VALUES (?, ?, ?, ?)',
+                     (data['id'], data['name'], status, data['calibration_due']))
+        log_audit_event('USR-001', 'TOOL_CREATED', json.dumps({'tool_id': data['id'], 'status': status}), conn=conn)
+        conn.commit()
+        return jsonify({'message': 'Tool created'}), 201
+    except sqlite3.IntegrityError:
+        return jsonify({'message': 'Tool ID already exists'}), 400
     finally:
         conn.close()
 
-# === MANUAL STATUS UPDATE (FR-IM-03, FR-COCI-12) ===
-@app.route('/api/tools/<tool_id>/status', methods=['PUT'])
-def update_tool_status(tool_id):
-    """
-    Allows supervisors to manually update a tool's status.
-    Implements FR-COCI-12 (e.g., set to 'Under Maintenance').
-    """
+@app.route('/api/tools/<tool_id>', methods=['PUT'])
+def update_tool(tool_id):
     data = request.get_json()
-    new_status = data.get('status')
-    if new_status not in ['Available', 'In Use', 'Overdue', 'Under Maintenance']:
-        return jsonify({'message': 'Invalid status'}), 400
-
     conn = get_db_connection()
     try:
-        cur = conn.execute('UPDATE tools SET status = ? WHERE id = ?', (new_status, tool_id))
-        if cur.rowcount == 0:
-            return jsonify({'message': 'Tool not found'}), 404
-        log_audit_event("SYSTEM", 'TOOL_STATUS_CHANGED',
-                        json.dumps({'tool_id': tool_id, 'new_status': new_status}))
+        conn.execute('UPDATE tools SET name = ?, calibration_due = ? WHERE id = ?',
+                     (data['name'], data['calibration_due'], tool_id))
+        log_audit_event('USR-001', 'TOOL_UPDATED', json.dumps({'tool_id': tool_id, 'updates': data}), conn=conn)
+        conn.commit()
+        return jsonify({'message': 'Tool updated'})
+    finally:
+        conn.close()
+
+@app.route('/api/tools/<tool_id>/status', methods=['PUT'])
+def update_tool_status(tool_id):
+    data = request.get_json()
+    conn = get_db_connection()
+    try:
+        status = data.get('status')
+        if status == 'Available':
+            conn.execute('UPDATE tools SET status = ?, current_holder = NULL WHERE id = ?', (status, tool_id))
+        else:
+            conn.execute('UPDATE tools SET status = ? WHERE id = ?', (status, tool_id))
+        log_audit_event('USR-001', 'TOOL_STATUS_CHANGE', json.dumps({'tool_id': tool_id, 'new_status': status}), conn=conn)
         conn.commit()
         return jsonify({'message': 'Status updated'})
     finally:
         conn.close()
 
-# === USER MANAGEMENT (FR-UM) ===
-@app.route('/api/users', methods=['GET', 'POST'])
-def manage_users():
-    """
-    Handles fetching all users (GET) and creating a new user (POST).
-    Implements FR-UM-02.
-    """
+@app.route('/api/tools/<tool_id>', methods=['DELETE'])
+def delete_tool(tool_id):
     conn = get_db_connection()
     try:
-        if request.method == 'GET':
-            users = conn.execute('SELECT * FROM users').fetchall()
-            return jsonify([dict(row) for row in users])
-
-        elif request.method == 'POST':
-            data = request.get_json()
-            if not data.get('id') or not data.get('name') or not data.get('role'):
-                return jsonify({'message': 'Missing required fields (id, name, role)'}), 400
-            try:
-                conn.execute('INSERT INTO users (id, name, role, contact_id) VALUES (?, ?, ?, NULL)',
-                             (data['id'], data['name'], data['role']))
-                log_audit_event("SYSTEM", 'USER_CREATED', json.dumps(data))
-                conn.commit()
-                return jsonify({'message': 'User created'}), 201
-            except sqlite3.IntegrityError:
-                return jsonify({'message': 'User ID already exists'}), 409
+        conn.execute('DELETE FROM tools WHERE id = ?', (tool_id,))
+        log_audit_event('USR-001', 'TOOL_DELETED', json.dumps({'tool_id': tool_id}), conn=conn)
+        conn.commit()
+        return jsonify({'message': 'Tool deleted'})
     finally:
         conn.close()
 
-@app.route('/api/users/<user_id>', methods=['GET', 'PUT', 'DELETE'])
-def single_user(user_id):
-    """
-    Handles fetching (GET), updating (PUT), or deleting (DELETE) a specific user.
-    Implements FR-UM-02.
-    """
+@app.route('/api/tools/batch', methods=['PUT'])
+def batch_update_tools():
+    data = request.get_json()
+    tool_ids = data.get('tool_ids', [])
+    updates = data.get('updates', {})
+    
+    if not tool_ids:
+        return jsonify({'message': 'No tool IDs provided'}), 400
+        
     conn = get_db_connection()
     try:
-        if request.method == 'GET':
-            user = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
-            if user is None:
-                return jsonify({'error': 'User not found'}), 404
-            return jsonify(dict(user))
-
-        elif request.method == 'PUT':
-            data = request.get_json()
-            cur = conn.execute('UPDATE users SET name = ?, role = ?, contact_id = ? WHERE id = ?',
-                               (data['name'], data['role'], data.get('contact_id'), user_id))
-            if cur.rowcount == 0:
-                return jsonify({'message': 'User not found'}), 404
-            log_audit_event("SYSTEM", 'USER_UPDATED', json.dumps({'user_id': user_id, **data}))
-            conn.commit()
-            return jsonify({'message': 'User updated'})
-
-        elif request.method == 'DELETE':
-            cur = conn.execute('DELETE FROM users WHERE id = ?', (user_id,))
-            if cur.rowcount == 0:
-                return jsonify({'message': 'User not found'}), 404
-            log_audit_event("SYSTEM", 'USER_DELETED', json.dumps({'user_id': user_id}))
-            conn.commit()
-            return jsonify({'message': 'User deleted'})
+        fields = []
+        values = []
+        
+        if 'status' in updates and updates['status']:
+            if updates['status'] == 'In Use':
+                return jsonify({'message': 'Cannot batch-set status to "In Use" without assigning a holder.'}), 400
+            
+            fields.append("status = ?")
+            values.append(updates['status'])
+            if updates['status'] == 'Available':
+                fields.append("current_holder = NULL")
+        
+        if 'calibration_due' in updates and updates['calibration_due']:
+            fields.append("calibration_due = ?")
+            values.append(updates['calibration_due'])
+            
+        if not fields:
+             return jsonify({'message': 'No valid fields to update'}), 400
+             
+        sql = f"UPDATE tools SET {', '.join(fields)} WHERE id IN ({','.join(['?']*len(tool_ids))})"
+        values.extend(tool_ids)
+        
+        conn.execute(sql, values)
+        log_audit_event('USR-001', 'BATCH_UPDATE', json.dumps({'count': len(tool_ids), 'updates': updates}), conn=conn)
+        conn.commit()
+        
+        return jsonify({'message': f'Successfully updated {len(tool_ids)} tools'})
     finally:
         conn.close()
 
-# === CHECKOUT / CHECKIN (FR-COCI) ===
+# --- AI Calibration Logic (NEW) ---
+
+@app.route('/api/calibration/predict', methods=['POST'])
+def get_ai_predictions():
+    # Read-Only: Gets proposals
+    try:
+        from predictive_calibration import generate_forecast
+        result = generate_forecast()
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/api/calibration/apply', methods=['POST'])
+def apply_ai_predictions():
+    # Write: Commits the approved changes
+    data = request.get_json()
+    approved_updates = data.get('updates', [])
+    
+    if not approved_updates:
+        return jsonify({'message': 'No updates provided'}), 400
+
+    conn = get_db_connection()
+    try:
+        count = 0
+        tool_ids = []
+        for update in approved_updates:
+            conn.execute('UPDATE tools SET calibration_due = ? WHERE id = ?',
+                         (update['new_date'], update['tool_id']))
+            tool_ids.append(update['tool_id'])
+            count += 1
+            
+        log_audit_event('USR-001', 'AI_CALIBRATION_UPDATE', 
+                       json.dumps({'count': count, 'tools': tool_ids}), 
+                       conn=conn)
+        
+        conn.commit()
+        return jsonify({'message': f'Successfully updated {count} tools based on AI recommendation.'})
+    finally:
+        conn.close()
+
+# --- Transactions ---
 @app.route('/api/checkout', methods=['POST'])
 def checkout_tool():
-    """
-    Handles the tool checkout process.
-    Implements FR-COCI-01 to FR-COCI-05.
-    """
     data = request.get_json()
     user_id = data.get('user_id')
     tool_id = data.get('tool_id')
@@ -280,7 +283,6 @@ def checkout_tool():
 
     conn = get_db_connection()
     try:
-        # Validate tool exists, is available, and not overdue
         tool = conn.execute('''
             SELECT *, date(calibration_due) < date('now') as is_overdue
             FROM tools WHERE id = ?
@@ -292,12 +294,12 @@ def checkout_tool():
         if tool['is_overdue']:
             return jsonify({'message': 'Tool is overdue for calibration'}), 400
 
-        # Update tool status and holder, log transaction
         conn.execute('UPDATE tools SET status = "In Use", current_holder = ? WHERE id = ?',
                      (user_id, tool_id))
         conn.execute('INSERT INTO transactions (user_id, tool_id, type) VALUES (?, ?, "checkout")',
                      (user_id, tool_id))
-        log_audit_event(user_id, 'TOOL_CHECKOUT', json.dumps({'tool_id': tool_id}))
+        
+        log_audit_event(user_id, 'TOOL_CHECKOUT', json.dumps({'tool_id': tool_id}), conn=conn)
         conn.commit()
         return jsonify({'message': 'Checkout successful'}), 200
     finally:
@@ -305,10 +307,6 @@ def checkout_tool():
 
 @app.route('/api/checkin', methods=['POST'])
 def checkin_tool():
-    """
-    Handles the tool check-in process.
-    Implements FR-COCI-10 to FR-COCI-12.
-    """
     data = request.get_json()
     tool_id = data.get('tool_id')
     report_issue = data.get('report_issue', False)
@@ -317,85 +315,103 @@ def checkin_tool():
 
     conn = get_db_connection()
     try:
-        # Validate tool exists and is currently in use by the same user (if user is known)
-        # For simplicity in this prototype, just check status 'In Use'
         tool = conn.execute('SELECT * FROM tools WHERE id = ? AND status = "In Use"', (tool_id,)).fetchone()
         if not tool:
             return jsonify({'message': 'Tool not checked out or already returned'}), 400
 
-        # Determine new status based on report
         new_status = "Under Maintenance" if report_issue else "Available"
-        current_holder = tool['current_holder'] # Capture holder before update
+        current_holder = tool['current_holder']
 
-        # Update tool status and holder, log transaction
         conn.execute('UPDATE tools SET status = ?, current_holder = NULL WHERE id = ?',
                      (new_status, tool_id))
         conn.execute('INSERT INTO transactions (user_id, tool_id, type) VALUES (?, ?, "checkin")',
                      (current_holder, tool_id))
+        
         log_audit_event(current_holder, 'TOOL_CHECKIN',
-                        json.dumps({'tool_id': tool_id, 'report_issue': report_issue}))
+                        json.dumps({'tool_id': tool_id, 'report_issue': report_issue}), conn=conn)
         conn.commit()
         return jsonify({'message': 'Check-in successful'}), 200
     finally:
         conn.close()
 
-# === CALIBRATION CALENDAR (FR-CAL) ===
-@app.route('/api/calibration/events')
-def get_calibration_events():
-    """
-    Provides data for the Supervisor UI's calibration calendar.
-    Implements FR-CAL-02.
-    """
-    year = request.args.get('year', type=int, default=datetime.now().year)
-    month = request.args.get('month', type=int, default=datetime.now().month)
-    start = f"{year}-{month:02d}-01"
-    end = f"{year}-{month+1:02d}-01" if month < 12 else f"{year+1}-01-01"
-
+# --- Projects ---
+@app.route('/api/projects')
+def get_projects():
     conn = get_db_connection()
     try:
-        rows = conn.execute('''
-            SELECT calibration_due, COUNT(*) as count
-            FROM tools
-            WHERE calibration_due >= ? AND calibration_due < ?
-            GROUP BY calibration_due
-        ''', (start, end)).fetchall()
-        return jsonify({row['calibration_due']: row['count'] for row in rows})
+        projects = conn.execute('SELECT id, name FROM projects ORDER BY name').fetchall()
+        return jsonify([dict(row) for row in projects])
     finally:
         conn.close()
 
-# === ALERTS (FR-AFT) ===
-@app.route('/api/alerts')
-def get_alerts():
-    """
-    Generates critical alerts for the Supervisor UI.
-    Implements FR-AFT-01, FR-AFT-02.
-    """
+@app.route('/api/projects/<project_id>')
+def get_project_details(project_id):
     conn = get_db_connection()
     try:
-        # Overdue tools
+        project = conn.execute('SELECT * FROM projects WHERE id = ?', (project_id,)).fetchone()
+        if not project:
+            return jsonify({'error': 'Project not found'}), 404
+        return jsonify(dict(project))
+    finally:
+        conn.close()
+
+@app.route('/api/projects/<project_id>/checkout', methods=['POST'])
+def checkout_project_batch(project_id):
+    data = request.get_json()
+    user_id = data.get('user_id')
+    tool_ids = data.get('tool_ids', [])
+    if not user_id:
+        return jsonify({'message': 'Missing user_id'}), 400
+
+    conn = get_db_connection()
+    try:
+        results = {'checked_out': [], 'unavailable': [], 'errors': []}
+        for tool_id in tool_ids:
+            tool = conn.execute('''
+                SELECT *, date(calibration_due) < date('now') as is_overdue
+                FROM tools WHERE id = ?
+            ''', (tool_id,)).fetchone()
+
+            if not tool:
+                results['errors'].append(f"Tool {tool_id} not found")
+                continue
+            if tool['status'] != 'Available':
+                results['unavailable'].append(tool_id)
+                continue
+            if tool['is_overdue']:
+                results['unavailable'].append(tool_id)
+                continue
+
+            conn.execute('UPDATE tools SET status = "In Use", current_holder = ? WHERE id = ?',
+                         (user_id, tool_id))
+            conn.execute('INSERT INTO transactions (user_id, tool_id, type) VALUES (?, ?, "checkout")',
+                         (user_id, tool_id))
+            log_audit_event(user_id, 'BATCH_CHECKOUT', json.dumps({'project_id': project_id, 'tool_id': tool_id}), conn=conn)
+            results['checked_out'].append(tool_id)
+
+        conn.commit()
+        return jsonify(results)
+    finally:
+        conn.close()
+
+# --- Alerts & Monitoring ---
+@app.route('/api/alerts')
+def get_alerts():
+    conn = get_db_connection()
+    try:
         overdue = conn.execute('''
             SELECT * FROM tools
             WHERE status != 'Under Maintenance'
             AND date(calibration_due) < date('now')
         ''').fetchall()
 
-        # Long checkouts: triggered 16 hours after the END OF THE DAY the tool was checked out
         long_checkout = conn.execute('''
             SELECT t.*, tr.timestamp
             FROM tools t
             JOIN transactions tr ON t.id = tr.tool_id
             WHERE t.status = 'In Use' AND tr.type = 'checkout'
-            AND (
-                strftime('%Y-%m-%d', tr.timestamp) || ' 23:59:59' < datetime('now', '-16 hours')
-            )
+            AND tr.timestamp < datetime('now', '-8 hours')
         ''').fetchall()
-
-        # Trigger Telegram alerts for newly detected long checkouts
-        # (In a real system, you'd track which alerts were already sent)
-        for tool in long_checkout:
-            # Note: This triggers on *every* fetch of alerts if the condition is met.
-            # For a production system, use a background task or track sent alerts in the DB.
-            trigger_overdue_alert(tool['id'], tool['current_holder'])
 
         return jsonify({
             'overdue': [dict(row) for row in overdue],
@@ -404,12 +420,8 @@ def get_alerts():
     finally:
         conn.close()
 
-# === ACTIVITY LOG ===
 @app.route('/api/transactions')
 def get_transactions():
-    """
-    Provides recent transaction history for the Supervisor UI.
-    """
     conn = get_db_connection()
     try:
         transactions = conn.execute('''
@@ -424,12 +436,8 @@ def get_transactions():
     finally:
         conn.close()
 
-# === LIVE VIEW ===
 @app.route('/api/live-view')
 def get_live_view():
-    """
-    Provides real-time view of currently checked-out tools.
-    """
     conn = get_db_connection()
     try:
         live_tools = conn.execute('''
@@ -439,81 +447,74 @@ def get_live_view():
                 t.status as tool_status,
                 u.id as user_id,
                 u.name as user_name,
-                tr.timestamp as checkout_time,
-                (strftime('%s', 'now') - strftime('%s', tr.timestamp)) as seconds_held
+                MAX(tr.timestamp) as checkout_time,
+                (strftime('%s', 'now') - strftime('%s', MAX(tr.timestamp))) as seconds_held
             FROM tools t
-            JOIN users u ON t.current_holder = u.id
+            LEFT JOIN users u ON t.current_holder = u.id
             JOIN transactions tr ON t.id = tr.tool_id
             WHERE t.status = 'In Use' AND tr.type = 'checkout'
-            ORDER BY tr.timestamp ASC
+            GROUP BY t.id
+            ORDER BY checkout_time ASC
         ''').fetchall()
         return jsonify([dict(row) for row in live_tools])
     finally:
         conn.close()
 
-# === AUDIT TRAIL ===
 @app.route('/api/audit-trail')
 def get_audit_trail():
-    """
-    Provides the audit trail explorer for compliance and review.
-    """
+    search = request.args.get('search', '')
+    action = request.args.get('action', '')
+    query = '''
+        SELECT a.*, u.name as user_name
+        FROM audit_log a
+        LEFT JOIN users u ON a.user_id = u.id
+        WHERE 1=1
+    '''
+    params = []
+    if search:
+        query += ' AND (a.details LIKE ? OR a.action LIKE ? OR u.name LIKE ?)'
+        term = f'%{search}%'
+        params.extend([term, term, term])
+    if action:
+        query += ' AND a.action = ?'
+        params.append(action)
+        
+    query += ' ORDER BY a.timestamp DESC LIMIT 100'
     conn = get_db_connection()
     try:
-        logs = conn.execute('''
-            SELECT a.*, u.name as user_name
-            FROM audit_log a
-            LEFT JOIN users u ON a.user_id = u.id
-            ORDER BY a.timestamp DESC
-            LIMIT 100
-        ''').fetchall()
+        logs = conn.execute(query, params).fetchall()
         return jsonify([dict(row) for row in logs])
     finally:
         conn.close()
 
-# === AI CALIBRATION FORECAST (PLACEHOLDER) ===
-@app.route('/api/calibration/predict', methods=['POST'])
-def trigger_ai_prediction():
-    """
-    Placeholder for triggering the AI calibration forecast.
-    Assumes a script named 'predictive_calibration.py' exists.
-    """
+@app.route('/api/calibration/events')
+def get_calibration_events():
+    year = request.args.get('year', type=int, default=datetime.now().year)
+    month = request.args.get('month', type=int, default=datetime.now().month)
+    start = f"{year}-{month:02d}-01"
+    end = f"{year}-{month+1:02d}-01" if month < 12 else f"{year+1}-01-01"
+    conn = get_db_connection()
     try:
-        from predictive_calibration import train_and_predict # Assumes the script is in the same directory
-        result = train_and_predict()
-        if result is None:
-            return jsonify({'message': 'Insufficient data for prediction'}), 400
-        return jsonify({'message': 'AI forecast completed', 'updated_tools': len(result)})
-    except ImportError:
-        return jsonify({'error': 'predictive_calibration module not found'}), 500
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        rows = conn.execute('''
+            SELECT calibration_due, COUNT(*) as count
+            FROM tools
+            WHERE calibration_due >= ? AND calibration_due < ?
+            GROUP BY calibration_due
+        ''', (start, end)).fetchall()
+        return jsonify({row['calibration_due']: row['count'] for row in rows})
+    finally:
+        conn.close()
 
-# === EMERGENCY UNLOCK (FR-AFT-03/04) ===
 @app.route('/api/unlock/emergency', methods=['POST'])
 def emergency_unlock():
-    """
-    Handles emergency manual unlock requests.
-    Implements FR-AFT-03, FR-AFT-04.
-    """
     data = request.get_json()
     reason = data.get('reason')
-    supervisor_id = data.get('supervisor_id', 'USR-001') # Default or get from session in real app
+    supervisor_id = data.get('supervisor_id', 'USR-001')
     if not reason:
         return jsonify({'message': 'Reason is required'}), 400
-
     log_audit_event(supervisor_id, 'EMERGENCY_UNLOCK',
                     json.dumps({'reason': reason, 'timestamp': datetime.now().isoformat()}))
+    return jsonify({'message': 'Unlock command sent'})
 
-    # In a real system, send command to Pi here
-    print(f"[EMERGENCY UNLOCK] Reason: {reason} by {supervisor_id}")
-    return jsonify({'message': 'Unlock command sent to Smart Box'})
-
-# === HEALTH CHECK ===
-@app.route('/api/health')
-def health_check():
-    """Simple endpoint to check if the API is running."""
-    return jsonify({'status': 'OK', 'time': datetime.now().isoformat()})
-
-# === RUN SERVER ===
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0') # host='0.0.0.0' allows access from other devices on the network
+    app.run(debug=True, host='0.0.0.0')
