@@ -34,116 +34,138 @@
 </head>
 <body class="bg-gray-100 h-screen flex items-center justify-center p-2 md:p-4">
     <div id="main-screen" class="w-full max-w-6xl bg-white rounded-xl shadow-lg p-3 md:p-5">
-        <div id="idle-screen" class="text-center">
-            <h1 class="text-2xl md:text-3xl font-bold mb-4">Smart Tool Station</h1>
-            <p class="text-gray-600 mb-6">Please authenticate by tapping your NFC card.</p>
-            <div class="flex flex-col items-center">
-                <div class="nfc-icon">📡</div>
-                <button id="tap-card-btn" class="w-full md:w-1/2 bg-blue-600 text-white py-4 text-lg rounded-lg font-semibold hover:bg-blue-700 transition flex items-center justify-center">
-                    <span class="mr-3">👉</span> Tap NFC Card to Log In
+        
+        <div id="idle-screen" class="text-center py-10">
+            <h1 class="text-3xl font-bold mb-2">Smart Tool Station</h1>
+            <p class="text-gray-600 mb-8">Please authenticate by tapping your NFC card.</p>
+            
+            <div class="flex flex-col items-center max-w-md mx-auto">
+                <div class="nfc-icon animate-pulse">📡</div>
+                
+                <div class="w-full bg-yellow-50 border border-yellow-200 p-4 rounded-lg mb-4">
+                    <label class="block text-xs font-bold text-yellow-700 uppercase mb-2">⚠️ Simulation Mode: Select User</label>
+                    <select id="simulated-user-select" class="w-full p-3 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 outline-none">
+                        <option value="">Loading users...</option>
+                    </select>
+                </div>
+
+                <button id="tap-card-btn" class="w-full bg-blue-600 text-white py-4 text-lg rounded-lg font-bold hover:bg-blue-700 transition shadow-lg flex items-center justify-center">
+                    <span class="mr-3 text-2xl">👉</span> Simulate NFC Tap
                 </button>
             </div>
         </div>
 
         <div id="auth-dashboard" class="hidden">
-            <div class="flex justify-between items-center mb-4">
-                <h1 class="text-xl md:text-2xl font-semibold">Welcome, <span id="welcome-user-name">User</span>!</h1>
-                <button id="logout-btn" class="text-sm md:text-base text-red-600 hover:underline font-medium">Logout</button>
+            <div class="flex justify-between items-center mb-6 border-b pb-4">
+                <div>
+                    <h1 class="text-2xl font-bold">Welcome, <span id="welcome-user-name" class="text-blue-600">User</span>!</h1>
+                    <p class="text-sm text-gray-500">Session Active</p>
+                </div>
+                <button id="logout-btn" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded font-medium">Log Out</button>
             </div>
 
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                <div id="checkout-card" class="action-card p-4 border-2 border-blue-500 rounded-xl bg-blue-50 cursor-pointer flex flex-col items-center justify-center">
-                    <div class="text-blue-700 text-4xl mb-2">🧰</div>
-                    <h2 class="text-lg md:text-xl font-bold text-center">Check Out Tools</h2>
-                    <p class="text-blue-600 text-center mt-1 text-sm">Start a new project or select tools manually</p>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-4">
+                <div id="checkout-card" class="action-card p-6 border-2 border-blue-100 rounded-xl bg-blue-50 cursor-pointer flex flex-col items-center justify-center hover:border-blue-300">
+                    <div class="text-blue-600 text-5xl mb-3">🧰</div>
+                    <h2 class="text-xl font-bold text-center text-blue-900">Check Out Tools</h2>
+                    <p class="text-blue-600/80 text-center mt-1 text-sm">Start project or select items</p>
                 </div>
-                <div id="return-card" class="action-card p-4 border-2 border-green-500 rounded-xl bg-green-50 cursor-pointer flex flex-col items-center justify-center">
-                    <div class="text-green-700 text-4xl mb-2">↩️</div>
-                    <h2 class="text-lg md:text-xl font-bold text-center">Return Tools</h2>
-                    <p class="text-green-600 text-center mt-1 text-sm">Return your checked-out tools</p>
+                <div id="return-card" class="action-card p-6 border-2 border-green-100 rounded-xl bg-green-50 cursor-pointer flex flex-col items-center justify-center hover:border-green-300">
+                    <div class="text-green-600 text-5xl mb-3">↩️</div>
+                    <h2 class="text-xl font-bold text-center text-green-900">Return Tools</h2>
+                    <p class="text-green-600/80 text-center mt-1 text-sm">Return checked-out items</p>
                 </div>
-                <div id="emergency-card" class="action-card p-4 border-2 border-red-500 rounded-xl bg-red-50 cursor-pointer flex flex-col items-center justify-center">
-                    <div class="text-red-700 text-4xl mb-2">🆘</div>
-                    <h2 class="text-lg md:text-xl font-bold text-center">Report Issue</h2>
-                    <p class="text-red-600 text-center mt-1 text-sm">Report damaged or lost tools</p>
+                <div id="emergency-card" class="action-card p-6 border-2 border-red-100 rounded-xl bg-red-50 cursor-pointer flex flex-col items-center justify-center hover:border-red-300">
+                    <div class="text-red-600 text-5xl mb-3">🆘</div>
+                    <h2 class="text-xl font-bold text-center text-red-900">Report Issue</h2>
+                    <p class="text-red-600/80 text-center mt-1 text-sm">Report damage or loss</p>
                 </div>
             </div>
         </div>
 
         <div id="checkout-section" class="hidden">
-            <div class="flex justify-between items-center mb-4">
-                <h2 class="text-xl md:text-2xl font-semibold">Check Out Tools</h2>
-                <button id="back-to-dashboard-checkout" class="text-sm md:text-base text-blue-600 hover:underline">Back to Dashboard</button>
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold">Check Out Tools</h2>
+                <button id="back-to-dashboard-checkout" class="text-blue-600 hover:text-blue-800 font-medium">← Back to Dashboard</button>
             </div>
 
             <div id="project-view" class="mb-4">
-                <div class="flex justify-between items-center mb-3">
-                    <h3 class="text-lg font-medium">Select a Project:</h3>
-                    <button id="show-overall-tools-btn" class="text-sm md:text-base text-blue-600 hover:underline">Show All Tools</button>
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-semibold text-gray-700">Select a Project:</h3>
+                    <button id="show-overall-tools-btn" class="text-blue-600 hover:underline text-sm font-medium">Skip to All Tools</button>
                 </div>
                 <div id="projects-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
                     </div>
             </div>
 
             <div id="project-details-view" class="hidden mb-4">
-                <button id="back-to-projects-btn" class="mb-3 text-sm md:text-base text-blue-600 hover:underline">&larr; Back to Projects</button>
-                <h3 class="text-lg font-medium mb-1" id="project-detail-name">[Project Name]</h3>
-                <p class="text-gray-700 text-sm mb-4" id="project-detail-briefing">[Project Briefing]</p>
+                <button id="back-to-projects-btn" class="mb-4 text-sm text-gray-500 hover:text-gray-800 font-medium">← Back to Projects</button>
+                <div class="bg-blue-50 p-4 rounded-lg mb-4 border border-blue-100">
+                    <h3 class="text-xl font-bold text-blue-900 mb-1" id="project-detail-name">[Project Name]</h3>
+                    <p class="text-blue-800 text-sm" id="project-detail-briefing">[Project Briefing]</p>
+                </div>
                 
-                <h4 class="font-medium mb-2">Required Tools:</h4>
-                <div id="project-tools-list" class="space-y-3 mb-4">
+                <h4 class="font-bold text-gray-700 mb-3">Required Tools:</h4>
+                <div id="project-tools-list" class="space-y-3 mb-6">
                     </div>
-                <div class="flex space-x-2">
-                    <button id="checkout-selected-tools-btn" class="flex-1 bg-green-600 text-white py-3 text-lg rounded">Checkout Selected</button>
-                    <button id="checkout-all-tools-btn" class="flex-1 bg-blue-600 text-white py-3 text-lg rounded">Checkout All</button>
+                <div class="flex space-x-3">
+                    <button id="checkout-selected-tools-btn" class="flex-1 bg-green-600 hover:bg-green-700 text-white py-3 text-lg rounded-lg font-bold shadow transition">Checkout Selected</button>
+                    <button id="checkout-all-tools-btn" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 text-lg rounded-lg font-bold shadow transition">Checkout All</button>
                 </div>
             </div>
 
             <div id="overall-tools-view" class="hidden">
-                <div class="flex justify-between items-center mb-3">
-                    <h3 class="text-lg font-medium">All Available Tools:</h3>
-                    <button id="back-to-projects-from-overall-btn" class="text-sm md:text-base text-blue-600 hover:underline">Back to Projects</button>
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-semibold text-gray-700">Available Inventory:</h3>
+                    <button id="back-to-projects-from-overall-btn" class="text-blue-600 hover:underline font-medium">Back to Projects</button>
                 </div>
-                <div id="overall-tools-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-4">
+                <div id="overall-tools-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-6">
                     </div>
-                <button id="manual-checkout-btn" class="w-full bg-blue-600 text-white py-3 text-lg rounded">Confirm Checkout</button>
+                <button id="manual-checkout-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 text-xl rounded-lg font-bold shadow-lg transition">Confirm Selection</button>
             </div>
         </div>
 
         <div id="return-section" class="hidden">
-            <div class="flex justify-between items-center mb-4">
-                <h2 class="text-xl md:text-2xl font-semibold">Return Tools</h2>
-                <button id="back-to-dashboard-return" class="text-sm md:text-base text-blue-600 hover:underline">Back to Dashboard</button>
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold">Return Tools</h2>
+                <button id="back-to-dashboard-return" class="text-blue-600 hover:text-blue-800 font-medium">← Back to Dashboard</button>
             </div>
             <div id="return-tools-list" class="space-y-3 mb-4">
                 </div>
-            <p id="no-tools-message" class="text-gray-500 text-center py-4 hidden">You have no tools checked out.</p>
+            <div id="no-tools-message" class="hidden flex flex-col items-center justify-center py-12 text-gray-400">
+                <div class="text-6xl mb-4">🎉</div>
+                <p class="text-xl font-medium">No tools currently checked out.</p>
+            </div>
         </div>
 
-        <div id="return-verification-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
-            <div class="bg-white rounded-xl p-6 w-11/12 max-w-md">
-                <h3 class="text-xl font-semibold mb-4">Verify Tool Return</h3>
-                <p class="mb-4">Please place the tool back in the box and close the door for verification.</p>
-                <div class="flex space-x-2">
-                    <button id="simulate-verification-btn" class="flex-1 bg-blue-600 text-white py-2 px-4 rounded">Simulate Verification</button>
-                    <button id="cancel-verification-btn" class="flex-1 bg-gray-600 text-white py-2 px-4 rounded">Cancel</button>
+        <div id="return-verification-modal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 hidden backdrop-blur-sm">
+            <div class="bg-white rounded-2xl p-8 w-11/12 max-w-md shadow-2xl text-center">
+                <div class="text-6xl mb-4">📥</div>
+                <h3 class="text-2xl font-bold mb-2">Place Tool in Box</h3>
+                <p class="text-gray-600 mb-8">Please place the tool back inside the Smart Box and close the door for verification.</p>
+                <div class="flex space-x-3">
+                    <button id="cancel-verification-btn" class="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-3 rounded-lg font-bold">Cancel</button>
+                    <button id="simulate-verification-btn" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-bold shadow">Simulate Door Close</button>
                 </div>
             </div>
         </div>
 
-        <div id="return-confirmation-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
-            <div class="bg-white rounded-xl p-6 w-11/12 max-w-md">
-                <h3 class="text-xl font-semibold mb-4">Confirm Tool Return</h3>
-                <p id="confirm-tool-name" class="mb-4">Tool: [Tool Name]</p>
-                <div class="mb-4">
-                    <label class="flex items-center">
-                        <input type="checkbox" id="report-issue-checkbox" class="mr-2">
-                        <span>Report Damage or Issue</span>
+        <div id="return-confirmation-modal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 hidden backdrop-blur-sm">
+            <div class="bg-white rounded-2xl p-8 w-11/12 max-w-md shadow-2xl">
+                <h3 class="text-2xl font-bold mb-4 border-b pb-2">Confirm Return</h3>
+                <p class="text-gray-500 text-sm mb-1">Tool Detected:</p>
+                <p id="confirm-tool-name" class="text-xl font-bold text-blue-900 mb-6 bg-blue-50 p-3 rounded border border-blue-100">Tool Name</p>
+                
+                <div class="mb-6 p-3 border border-red-200 bg-red-50 rounded-lg">
+                    <label class="flex items-center cursor-pointer">
+                        <input type="checkbox" id="report-issue-checkbox" class="w-5 h-5 text-red-600 rounded focus:ring-red-500 mr-3">
+                        <span class="font-medium text-red-800">Report Damage / Issue?</span>
                     </label>
                 </div>
-                <div class="flex space-x-2">
-                    <button id="confirm-return-btn" class="flex-1 bg-green-600 text-white py-2 px-4 rounded">Confirm Return</button>
-                    <button id="back-to-verification-btn" class="flex-1 bg-gray-600 text-white py-2 px-4 rounded">Back</button>
+                
+                <div class="flex space-x-3">
+                    <button id="back-to-verification-btn" class="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-3 rounded-lg font-bold">Back</button>
+                    <button id="confirm-return-btn" class="flex-1 bg-green-600 hover:bg-green-700 text-white py-3 rounded-lg font-bold shadow">Confirm Check-In</button>
                 </div>
             </div>
         </div>
@@ -166,28 +188,49 @@
         const returnVerificationModal = document.getElementById('return-verification-modal');
         const returnConfirmationModal = document.getElementById('return-confirmation-modal');
 
+        // --- NEW: Load Users for Simulation ---
+        async function loadSimulatedUsers() {
+            try {
+                const res = await fetch('/api/users?t=' + Date.now());
+                const users = await res.json();
+                const select = document.getElementById('simulated-user-select');
+                select.innerHTML = '';
+                
+                users.forEach(user => {
+                    const option = document.createElement('option');
+                    option.value = user.id;
+                    option.textContent = `${user.name} (${user.role})`;
+                    select.appendChild(option);
+                });
+            } catch (e) {
+                console.error("Failed to load users for simulation", e);
+            }
+        }
+
+        // Call this when page loads
+        document.addEventListener('DOMContentLoaded', loadSimulatedUsers);
+
         // --- Authentication ---
         document.getElementById('tap-card-btn').addEventListener('click', () => {
-            const validUsers = ['USR-002', 'USR-003', 'USR-004'];
-            const randomUserId = validUsers[Math.floor(Math.random() * validUsers.length)];
-            authenticateUser(randomUserId);
+            const userId = document.getElementById('simulated-user-select').value;
+            if(!userId) { alert("Please wait for users to load or select a user."); return; }
+            authenticateUser(userId);
         });
 
         async function authenticateUser(userId) {
             const tapBtn = document.getElementById('tap-card-btn');
             const originalBtnText = tapBtn.innerHTML;
-            tapBtn.innerHTML = '<span class="mr-3">⏳</span> Authenticating...';
+            tapBtn.innerHTML = '<span class="animate-spin mr-2">🔄</span> Verifying...';
             tapBtn.disabled = true;
 
             try {
-                // FIXED: Cache Buster
                 const response = await fetch(`/api/users/${userId}?t=${Date.now()}`);
                 if (response.ok) {
                     const userData = await response.json();
                     currentUser = userData;
                     showAuthenticatedDashboard();
                 } else {
-                    alert("Invalid User ID.");
+                    alert("User not found in database.");
                 }
             } catch (error) {
                 console.error("Auth error:", error);
@@ -240,22 +283,20 @@
 
         // --- Project & Tool Loading ---
         async function loadProjects() {
-            // FIXED: Cache Buster
             const res = await fetch(`/api/projects?t=${Date.now()}`);
             const projects = await res.json();
             const projectsGrid = document.getElementById('projects-grid');
             projectsGrid.innerHTML = '';
             projects.forEach(p => {
                 const card = document.createElement('div');
-                card.className = 'action-card p-4 border rounded-lg bg-white cursor-pointer flex flex-col items-center justify-center text-center';
-                card.innerHTML = `<div class="font-semibold text-lg">${p.name}</div>`;
+                card.className = 'action-card p-6 border rounded-xl bg-white cursor-pointer flex flex-col items-center justify-center text-center shadow-sm hover:shadow-md';
+                card.innerHTML = `<div class="font-bold text-lg text-gray-800">${p.name}</div>`;
                 card.onclick = () => showProjectDetails(p.id);
                 projectsGrid.appendChild(card);
             });
         }
 
         async function showProjectDetails(projectId) {
-            // FIXED: Cache Buster
             const res = await fetch(`/api/projects/${projectId}?t=${Date.now()}`);
             const project = await res.json();
             
@@ -264,8 +305,6 @@
             currentProjectId = projectId;
             
             const toolIds = JSON.parse(project.tool_list);
-            
-            // FIXED: Critical Cache Buster to get updated Status
             const allToolsRes = await fetch(`/api/tools?t=${Date.now()}`);
             const allTools = await allToolsRes.json();
             const projectTools = allTools.filter(t => toolIds.includes(t.id));
@@ -275,13 +314,13 @@
             projectTools.forEach(tool => {
                 const statusInfo = getToolStatusInfo(tool);
                 const toolDiv = document.createElement('div');
-                toolDiv.className = 'tool-card p-3 border rounded flex items-center';
+                toolDiv.className = 'tool-card p-4 border rounded-lg bg-white flex items-center shadow-sm';
                 toolDiv.innerHTML = `
-                    <input type="checkbox" class="mr-3 project-tool-checkbox h-5 w-5" value="${tool.id}">
+                    <input type="checkbox" class="mr-4 project-tool-checkbox w-6 h-6 text-blue-600 rounded focus:ring-blue-500" value="${tool.id}">
                     <div class="flex-1">
-                        <div class="font-mono text-sm">${tool.id}</div>
-                        <div class="font-semibold">${tool.name}</div>
-                        <span class="${statusInfo.class} text-xs px-2 py-0.5 rounded mt-1 inline-block">${statusInfo.text}</span>
+                        <div class="font-mono text-xs text-gray-500">${tool.id}</div>
+                        <div class="font-bold text-gray-800">${tool.name}</div>
+                        <span class="${statusInfo.class} text-xs px-2 py-1 rounded mt-1 inline-block font-bold">${statusInfo.text}</span>
                     </div>
                 `;
                 projectToolsList.appendChild(toolDiv);
@@ -293,21 +332,20 @@
 
         function getToolStatusInfo(tool) {
             if (tool.status !== 'Available') {
-                return { class: 'status-no-go', text: 'NO-GO (Not Available)' };
+                return { class: 'status-no-go', text: '⛔ UNAVAILABLE' };
             }
             if (tool.status === 'Overdue') {
-                return { class: 'status-no-go', text: 'NO-GO (Overdue)' };
+                return { class: 'status-no-go', text: '⛔ OVERDUE' };
             } else if (new Date(tool.calibration_due) < new Date()) {
-                return { class: 'status-overdue', text: 'NO-GO (Cal Due)' };
+                return { class: 'status-overdue', text: '⚠️ CALIBRATION DUE' };
             } else if (new Date(tool.calibration_due) < new Date(Date.now() + 7 * 86400000)) {
-                return { class: 'status-warning', text: 'WARNING (Due Soon)' };
+                return { class: 'status-warning', text: '⚠️ DUE SOON' };
             } else {
-                return { class: 'status-go', text: 'GO' };
+                return { class: 'status-go', text: '✅ READY' };
             }
         }
 
         async function loadOverallTools() {
-            // FIXED: Cache Buster
             const res = await fetch(`/api/tools/available?t=${Date.now()}`);
             const tools = await res.json();
             const overallToolsGrid = document.getElementById('overall-tools-grid');
@@ -321,11 +359,11 @@
             tools.forEach(tool => {
                 const statusInfo = getToolStatusInfo(tool);
                 const card = document.createElement('div');
-                card.className = 'tool-card p-3 border rounded cursor-pointer';
+                card.className = 'tool-card p-4 border rounded-lg bg-white cursor-pointer shadow-sm hover:shadow-md';
                 card.innerHTML = `
-                    <div class="font-mono text-sm">${tool.id}</div>
-                    <div class="font-semibold">${tool.name}</div>
-                    <span class="${statusInfo.class} text-xs px-2 py-0.5 rounded mt-1 inline-block">${statusInfo.text}</span>
+                    <div class="font-mono text-xs text-gray-500">${tool.id}</div>
+                    <div class="font-bold text-gray-800 mb-2">${tool.name}</div>
+                    <span class="${statusInfo.class} text-xs px-2 py-1 rounded font-bold">${statusInfo.text}</span>
                 `;
                 card.onclick = () => selectToolForManualCheckout(tool);
                 gridElement.appendChild(card);
@@ -335,9 +373,9 @@
         function selectToolForManualCheckout(tool) {
             selectedToolForManualCheckout = tool;
             document.querySelectorAll('#overall-tools-grid .tool-card').forEach(card => {
-                card.classList.remove('border-blue-500', 'bg-blue-50');
+                card.classList.remove('border-blue-500', 'bg-blue-50', 'ring-2', 'ring-blue-300');
             });
-            event.currentTarget.classList.add('border-blue-500', 'bg-blue-50');
+            event.currentTarget.classList.add('border-blue-500', 'bg-blue-50', 'ring-2', 'ring-blue-300');
         }
 
         // --- Navigation within Checkout ---
@@ -373,8 +411,8 @@
                 body: JSON.stringify({ user_id: currentUser.id, tool_ids: toolIds })
             });
             const result = await res.json();
-            let message = `Batch checkout complete!\nChecked out: ${result.checked_out.length}\nUnavailable: ${result.unavailable.length}`;
-            if (result.errors.length > 0) message += `\nErrors: ${result.errors.length}`;
+            let message = `Batch checkout complete!\n✅ Checked out: ${result.checked_out.length}`;
+            if (result.unavailable.length > 0) message += `\n❌ Unavailable: ${result.unavailable.length}`;
             alert(message);
             authDashboard.classList.remove('hidden');
             checkoutSection.classList.add('hidden');
@@ -406,7 +444,6 @@
         // --- Return Tools Flow ---
         async function loadCheckedOutToolsForReturn() {
             if (!currentUser) return;
-            // FIXED: Cache Buster
             const res = await fetch(`/api/tools?t=${Date.now()}`);
             const allTools = await res.json();
             const checkedOutByUser = allTools.filter(t => t.current_holder === currentUser.id && t.status === 'In Use');
@@ -422,21 +459,20 @@
                 returnToolsList.innerHTML = '';
                 checkedOutByUser.forEach(tool => {
                     const toolDiv = document.createElement('div');
-                    toolDiv.className = 'tool-card p-3 border rounded flex justify-between items-center';
+                    toolDiv.className = 'tool-card p-4 border rounded-lg bg-white flex justify-between items-center shadow-sm';
                     toolDiv.innerHTML = `
                         <div>
-                            <div class="font-mono text-sm">${tool.id}</div>
-                            <div class="font-semibold">${tool.name}</div>
-                            <div class="text-xs text-gray-500">Checked out: ${new Date(tool.calibration_due).toLocaleString()}</div>
+                            <div class="font-mono text-xs text-gray-500">${tool.id}</div>
+                            <div class="font-bold text-gray-800">${tool.name}</div>
+                            <div class="text-xs text-blue-600 mt-1">Checked out: ${new Date(tool.calibration_due).toLocaleDateString()}</div>
                         </div>
-                        <button class="return-tool-btn bg-green-600 text-white py-2 px-4 rounded text-sm" 
+                        <button class="return-tool-btn bg-green-600 hover:bg-green-700 text-white py-2 px-5 rounded-lg text-sm font-bold shadow transition" 
                                 data-tool-id="${tool.id}" 
                                 data-tool-name="${tool.name}">Return</button>
                     `;
                     returnToolsList.appendChild(toolDiv);
                 });
                 
-                // Add event listeners
                 document.querySelectorAll('.return-tool-btn').forEach(btn => {
                     btn.addEventListener('click', async (e) => {
                         toolToReturn = e.currentTarget.dataset.toolId;
@@ -461,7 +497,7 @@
         });
 
         function showReturnConfirmationModal() {
-            document.getElementById('confirm-tool-name').textContent = `Tool: ${toolToReturnName}`;
+            document.getElementById('confirm-tool-name').textContent = toolToReturnName;
             returnConfirmationModal.classList.remove('hidden');
         }
 

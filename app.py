@@ -5,6 +5,14 @@ import json
 from datetime import datetime, timedelta
 import requests
 
+# Import the new Telegram Manager
+# (Make sure telegram_manager.py is in the same folder)
+try:
+    import telegram_manager
+except ImportError:
+    telegram_manager = None
+    print("⚠️ Warning: telegram_manager.py not found. Telegram alerts will be disabled.")
+
 app = Flask(__name__)
 
 def get_db_connection():
@@ -232,11 +240,10 @@ def batch_update_tools():
     finally:
         conn.close()
 
-# --- AI Calibration Logic (NEW) ---
+# --- AI Calibration Logic ---
 
 @app.route('/api/calibration/predict', methods=['POST'])
 def get_ai_predictions():
-    # Read-Only: Gets proposals
     try:
         from predictive_calibration import generate_forecast
         result = generate_forecast()
@@ -246,7 +253,6 @@ def get_ai_predictions():
 
 @app.route('/api/calibration/apply', methods=['POST'])
 def apply_ai_predictions():
-    # Write: Commits the approved changes
     data = request.get_json()
     approved_updates = data.get('updates', [])
     
@@ -394,7 +400,7 @@ def checkout_project_batch(project_id):
     finally:
         conn.close()
 
-# --- Alerts & Monitoring ---
+# --- Alerts & Monitoring (with Telegram Hook) ---
 @app.route('/api/alerts')
 def get_alerts():
     conn = get_db_connection()
@@ -412,6 +418,13 @@ def get_alerts():
             WHERE t.status = 'In Use' AND tr.type = 'checkout'
             AND tr.timestamp < datetime('now', '-8 hours')
         ''').fetchall()
+
+        # TRIGGER TELEGRAM ALERTS (Passive check)
+        if telegram_manager:
+            try:
+                telegram_manager.check_and_notify_users()
+            except Exception as e:
+                print(f"Telegram Trigger Failed: {e}")
 
         return jsonify({
             'overdue': [dict(row) for row in overdue],
@@ -512,8 +525,17 @@ def emergency_unlock():
     supervisor_id = data.get('supervisor_id', 'USR-001')
     if not reason:
         return jsonify({'message': 'Reason is required'}), 400
+    
     log_audit_event(supervisor_id, 'EMERGENCY_UNLOCK',
                     json.dumps({'reason': reason, 'timestamp': datetime.now().isoformat()}))
+    
+    # TELEGRAM: Critical Alert
+    if telegram_manager:
+        telegram_manager.send_telegram_message(
+            telegram_manager.SUPERVISOR_CHAT_ID, 
+            f"🚨 **EMERGENCY UNLOCK TRIGGERED**\nUser: {supervisor_id}\nReason: {reason}"
+        )
+
     return jsonify({'message': 'Unlock command sent'})
 
 if __name__ == '__main__':
