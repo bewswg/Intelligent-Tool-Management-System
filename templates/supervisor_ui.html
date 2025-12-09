@@ -526,6 +526,16 @@
             </div>
         </div>
     </div>
+
+    <div id="tools-due-modal" class="modal-overlay">
+        <div class="bg-white rounded-xl w-1/3 p-0 overflow-hidden">
+            <div class="p-4 border-b flex justify-between">
+                <h3 class="font-bold">Due Date Info</h3>
+                <button id="close-tools-modal">&times;</button>
+            </div>
+            <ul id="tools-due-list" class="p-4 max-h-60 overflow-y-auto"></ul>
+        </div>
+    </div>
     
     <div id="issue-modal" class="modal-overlay">
         <div class="bg-white rounded-xl w-1/3 p-6 shadow-2xl">
@@ -622,7 +632,6 @@
             }
 
             // 5. --- FIX: SETUP CALENDAR BUTTONS ---
-            // We attach these HERE to ensure the buttons actually exist
             const prevBtn = document.getElementById('prev-month');
             const nextBtn = document.getElementById('next-month');
             const jumpBtn = document.getElementById('jump-today-btn');
@@ -648,6 +657,12 @@
                     currentYear = now.getFullYear();
                     loadCalendar();
                 };
+            }
+
+            // 6. FIX: Setup "Add Project" Button (Restored)
+            const addProjBtn = document.getElementById('add-project-btn');
+            if(addProjBtn) {
+                addProjBtn.onclick = () => openProjectModal();
             }
         });
 
@@ -878,7 +893,7 @@
             } catch(e) {}
         }
 
-        // ================= PROJECT MANAGEMENT =================
+        // ================= PROJECT MANAGEMENT (SPLIT VIEW) =================
         async function loadProjects() {
             const res = await fetch('/api/projects');
             allProjects = await res.json();
@@ -1006,7 +1021,7 @@
                 else if (t.status === 'Under Maintenance') statusClass = 'bg-orange-100 text-orange-700';
 
                 tb.innerHTML += `
-                    <tr class="hover:bg-slate-50 border-b last:border-0">
+                    <tr class="hover:bg-slate-50 border-b">
                         <td class="px-6 py-4 text-center"><input type="checkbox" class="tool-checkbox" value="${t.id}"></td>
                         <td class="px-6 py-4 font-mono text-sm text-slate-500">${t.id}</td>
                         <td class="px-6 py-4 font-mono text-xs text-slate-400">${t.model || '-'}</td>
@@ -1108,13 +1123,14 @@
             document.getElementById('emergency-modal').style.display='none';
         };
 
-        // ISSUES LOGIC
+        // ISSUES LOGIC (ROBUST DATA ATTRIBUTES)
         async function loadIssues() {
             const res = await fetch('/api/issues');
             const issues = await res.json();
             const filter = document.getElementById('issue-filter').value;
             const tb = document.getElementById('issue-table');
             tb.innerHTML = '';
+            
             issues.forEach(i => {
                 if (filter === 'open' && i.status === 'Closed') return;
                 if (filter === 'closed' && i.status !== 'Closed') return;
@@ -1124,6 +1140,9 @@
                 if(i.status === 'Working on it') color = 'bg-blue-100 text-blue-800';
                 if(i.status === 'Closed') color = 'bg-green-100 text-green-800';
                 
+                // Safe handling of description string
+                const safeDesc = i.description ? i.description.replace(/"/g, '&quot;') : '';
+
                 tb.innerHTML += `
                     <tr class="hover:bg-slate-50 border-b last:border-0">
                         <td class="px-6 py-4"><span class="px-2 py-1 rounded text-xs font-bold uppercase ${color}">${i.status}</span></td>
@@ -1131,19 +1150,90 @@
                         <td class="px-6 py-4 font-bold text-slate-700">${i.tool_name}<br><span class="text-xs font-normal text-slate-400">${i.tool_id}</span></td>
                         <td class="px-6 py-4"><div class="font-bold text-xs text-red-600 uppercase">${i.defect_type}</div><div class="text-sm text-slate-600 truncate max-w-xs">${i.description}</div></td>
                         <td class="px-6 py-4 text-sm">${i.reporter_name}</td>
-                        <td class="px-6 py-4 text-right"><button onclick="manageCase('${i.id}', '${i.status}', '${i.description.replace(/'/g, "\\'")}')" class="text-blue-600 font-bold hover:underline text-xs">Manage</button></td>
+                        <td class="px-6 py-4 text-right">
+                            <button class="text-blue-600 font-bold hover:underline text-xs manage-issue-btn" 
+                                data-id="${i.id}" 
+                                data-status="${i.status}" 
+                                data-desc="${safeDesc}">
+                                Manage
+                            </button>
+                        </td>
                     </tr>`;
             });
+
+            // Attach listeners safely
+            document.querySelectorAll('.manage-issue-btn').forEach(btn => {
+                btn.onclick = (e) => {
+                    const el = e.target;
+                    manageCase(el.dataset.id, el.dataset.status, el.dataset.desc);
+                };
+            });
         }
-        function manageCase(id, status, desc) { currentIssueId = id; document.getElementById('modal-case-id').innerText = id; document.getElementById('modal-desc').innerText = desc; document.getElementById('modal-status').value = status; toggleIssueCheck(); document.getElementById('issue-modal').style.display = 'flex'; }
-        function toggleIssueCheck() { const val = document.getElementById('modal-status').value; document.getElementById('close-options').classList.toggle('hidden', val !== 'Closed'); }
-        async function saveCaseStatus() { const status = document.getElementById('modal-status').value; const available = document.getElementById('make-available-cb').checked; await fetch(`/api/issues/${currentIssueId}/status`, {method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({status: status, make_tool_available: available})}); document.getElementById('issue-modal').style.display = 'none'; loadIssues(); }
+
+        function manageCase(id, status, desc) {
+            currentIssueId = id;
+            document.getElementById('modal-case-id').innerText = id;
+            document.getElementById('modal-desc').innerText = desc;
+            document.getElementById('modal-status').value = status;
+            toggleIssueCheck();
+            document.getElementById('issue-modal').style.display = 'flex';
+        }
+
+        function toggleIssueCheck() { 
+            const val = document.getElementById('modal-status').value; 
+            document.getElementById('close-options').classList.toggle('hidden', val !== 'Closed'); 
+        }
+
+        async function saveCaseStatus() { 
+            const status = document.getElementById('modal-status').value; 
+            const available = document.getElementById('make-available-cb').checked; 
+            await fetch(`/api/issues/${currentIssueId}/status`, {
+                method: 'PUT', 
+                headers: {'Content-Type':'application/json'}, 
+                body: JSON.stringify({status: status, make_tool_available: available})
+            }); 
+            document.getElementById('issue-modal').style.display = 'none'; 
+            loadIssues(); 
+        }
         
         // AI Logic
-        document.getElementById('ai-forecast-btn').onclick = async () => { const res = await fetch('/api/calibration/predict', {method:'POST'}); const data = await res.json(); currentProposals = data.proposals || []; if(currentProposals.length===0) return alert("No recommendations."); document.getElementById('ai-proposal-body').innerHTML = currentProposals.map((p,i) => `<tr class="hover:bg-purple-50"><td class="p-3"><input type="checkbox" class="ai-cb" checked data-index="${i}"></td><td class="p-3 font-bold text-sm">${p.tool_name}</td><td class="p-3 text-sm">${p.current_date}</td><td class="p-3 font-bold text-purple-600 text-sm">${p.recommended_date}</td><td class="p-3 text-sm italic">${p.reason}</td></tr>`).join(''); document.getElementById('ai-review-modal').style.display='flex'; };
+        document.getElementById('ai-forecast-btn').onclick = async () => { 
+            const res = await fetch('/api/calibration/predict', {method:'POST'}); 
+            const data = await res.json(); 
+            currentProposals = data.proposals || []; 
+            if(currentProposals.length===0) return alert("No recommendations."); 
+            
+            document.getElementById('ai-proposal-body').innerHTML = currentProposals.map((p,i) => `
+                <tr class="hover:bg-purple-50">
+                    <td class="p-3"><input type="checkbox" class="ai-cb" checked data-index="${i}"></td>
+                    <td class="p-3 font-bold text-sm">${p.tool_name}</td>
+                    <td class="p-3 text-sm">${p.current_date}</td>
+                    <td class="p-3 font-bold text-purple-600 text-sm">${p.recommended_date}</td>
+                    <td class="p-3 text-sm italic">${p.reason}</td>
+                </tr>`).join(''); 
+            
+            document.getElementById('ai-review-modal').style.display='flex'; 
+        };
+
         document.getElementById('close-ai-modal').onclick = () => document.getElementById('ai-review-modal').style.display='none';
         document.getElementById('cancel-ai').onclick = () => document.getElementById('ai-review-modal').style.display='none';
-        document.getElementById('approve-ai').onclick = async () => { const updates = Array.from(document.querySelectorAll('.ai-cb:checked')).map(cb => ({ tool_id: currentProposals[cb.dataset.index].tool_id, new_date: currentProposals[cb.dataset.index].recommended_date })); await fetch('/api/calibration/apply', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({updates})}); document.getElementById('ai-review-modal').style.display='none'; loadDashboard(); loadInventory(); };
+        
+        document.getElementById('approve-ai').onclick = async () => { 
+            const updates = Array.from(document.querySelectorAll('.ai-cb:checked')).map(cb => ({ 
+                tool_id: currentProposals[cb.dataset.index].tool_id, 
+                new_date: currentProposals[cb.dataset.index].recommended_date 
+            })); 
+            
+            await fetch('/api/calibration/apply', { 
+                method:'POST', 
+                headers:{'Content-Type':'application/json'}, 
+                body:JSON.stringify({updates})
+            }); 
+            
+            document.getElementById('ai-review-modal').style.display='none'; 
+            loadDashboard(); 
+            loadInventory(); 
+        };
     </script>
 </body>
 </html>
