@@ -1,106 +1,207 @@
 # init_db.py
 import sqlite3
+import json
+import random
 from datetime import datetime, timedelta
 
 connection = sqlite3.connect('database.db')
-with open('schema.sql') as f:
-    connection.executescript(f.read())
+cursor = connection.cursor()
 
-cur = connection.cursor()
+# 1. DROP Tables
+cursor.executescript("""
+    DROP TABLE IF EXISTS issue_reports;
+    DROP TABLE IF EXISTS transactions;
+    DROP TABLE IF EXISTS projects;
+    DROP TABLE IF EXISTS audit_log;
+    DROP TABLE IF EXISTS tools;
+    DROP TABLE IF EXISTS users;
+    
+    CREATE TABLE users (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        role TEXT NOT NULL,
+        contact_id TEXT,
+        nfc_id TEXT
+    );
 
-# === USERS ===
-cur.execute("INSERT INTO users (id, name, role, contact_id) VALUES (?, ?, ?, ?)",
-            ('USR-001', 'Sarah Adams', 'Supervisor', None))
-cur.execute("INSERT INTO users (id, name, role, contact_id) VALUES (?, ?, ?, ?)",
-            ('USR-002', 'John Doe', 'Technician', '954223496'))
-cur.execute("INSERT INTO users (id, name, role, contact_id) VALUES (?, ?, ?, ?)",
-            ('USR-003', 'Maya Lin', 'Technician', None))
-cur.execute("INSERT INTO users (id, name, role, contact_id) VALUES (?, ?, ?, ?)",
-            ('USR-004', 'David Chen', 'Technician', None))
+    CREATE TABLE tools (
+        id TEXT PRIMARY KEY,
+        model TEXT NOT NULL,
+        name TEXT NOT NULL,
+        status TEXT NOT NULL,
+        current_holder TEXT,
+        calibration_due TEXT,
+        total_checkouts INTEGER DEFAULT 0,
+        total_usage_hours REAL DEFAULT 0.0
+    );
 
-# === HELPERS FOR DATES ===
-today = datetime.today()
-in_7_days = (today + timedelta(days=7)).strftime('%Y-%m-%d')
-in_30_days = (today + timedelta(days=30)).strftime('%Y-%m-%d')
-in_90_days = (today + timedelta(days=90)).strftime('%Y-%m-%d')
-in_180_days = (today + timedelta(days=180)).strftime('%Y-%m-%d')
-overdue_date = (today - timedelta(days=10)).strftime('%Y-%m-%d')
-long_checkout_time = (today - timedelta(hours=10)).strftime('%Y-%m-%d %H:%M:%S')
+    CREATE TABLE transactions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT NOT NULL,
+        tool_id TEXT NOT NULL,
+        type TEXT NOT NULL,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+        last_alert_sent DATETIME,
+        FOREIGN KEY(user_id) REFERENCES users(id),
+        FOREIGN KEY(tool_id) REFERENCES tools(id)
+    );
 
-# === TOOLS ===
-tools_data = [
-    ('TW-001', 'Digital Torque Wrench (High Use)', 'Available', None, in_30_days, 45, 180.5),
-    ('TW-002', 'Digital Torque Wrench', 'Available', None, in_90_days, 12, 48.0),
-    ('TW-003', 'Analog Torque Wrench', 'In Use', 'USR-002', in_180_days, 8, 32.0),
-    ('TW-004', 'Heavy-Duty Torque Wrench', 'Overdue', None, overdue_date, 20, 80.0),
-    ('TW-005', 'Digital Torque Wrench (New)', 'Pending Verification', None, in_30_days, 0, 0.0),
-    ('MM-001', 'Digital Multimeter', 'Available', None, in_90_days, 15, 45.0),
-    ('MM-002', 'Digital Multimeter', 'Under Maintenance', None, in_180_days, 5, 15.0),
-    ('CL-001', 'Current Clamp Meter', 'In Use', 'USR-003', in_30_days, 10, 30.0),
-    ('PS-001', 'DC Power Supply', 'Overdue', 'USR-004', overdue_date, 25, 75.0),
-    ('BO-001', 'Borescope Camera', 'Available', None, '2026-06-15', 3, 8.2),
-    ('VT-001', 'Video Inspection Probe', 'Available', None, '2026-08-20', 2, 5.0),
-    ('FLUX-01', 'Flux Detector', 'Under Maintenance', None, '2026-03-10', 18, 54.0),
-    ('CAL-001', 'Pressure Calibrator', 'Available', None, in_30_days, 30, 90.0),
-    ('GAUGE-01', 'Precision Thickness Gauge', 'Available', None, in_90_days, 7, 21.0),
-    ('SOCK-01', 'Socket Wrench Set', 'In Use', 'USR-002', in_180_days, 22, 66.0),
-    ('TACH-01', 'Digital Tachometer', 'Overdue', None, overdue_date, 14, 42.0),
-    ('DUP-001', 'Torque Wrench', 'Available', None, in_30_days, 5, 20.0),
-    ('DUP-002', 'Torque Wrench', 'Available', None, in_90_days, 3, 12.0),
-    ('AI-TEST', 'AI Calibration Test Tool', 'Available', None, in_7_days, 50, 200.0),
-    ('ALERT-01', 'Overdue Checkout Tool', 'In Use', 'USR-002', in_90_days, 5, 20.0),
-    ('ALERT-02', 'Recent Checkout Tool', 'In Use', 'USR-003', in_90_days, 3, 12.0),
-    ('ALERT-03', 'Today Checkout Tool', 'In Use', 'USR-004', in_90_days, 1, 4.0),
+    CREATE TABLE issue_reports (
+        id TEXT PRIMARY KEY,
+        tool_id TEXT,
+        reporter_id TEXT,
+        defect_type TEXT,
+        description TEXT,
+        status TEXT DEFAULT 'New',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        closed_at TIMESTAMP,
+        FOREIGN KEY(tool_id) REFERENCES tools(id),
+        FOREIGN KEY(reporter_id) REFERENCES users(id)
+    );
+
+    CREATE TABLE projects (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        briefing TEXT NOT NULL,
+        tool_list TEXT NOT NULL
+    );
+    
+    CREATE TABLE audit_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+        user_id TEXT,
+        action TEXT NOT NULL,
+        details TEXT
+    );
+""")
+
+# 2. SEED USERS (Added more techs to simulate a busy shift)
+users = [
+    ('USR-001', 'Sarah Adams', 'Supervisor', '954223496', None),
+    ('USR-002', 'John Doe', 'Technician', '954223496', '0xd4 0x81 0x4d 0x5'), # Matches NFC
+    ('USR-003', 'Maya Lin', 'Technician', None, None),
+    ('USR-004', 'David Chen', 'Technician', None, None),
+    ('USR-005', 'Thanadol', 'Technician', None, '0xd4 0x81 0x4d 0x5'),
+    ('USR-006', 'Alex Rogan', 'Technician', None, None),
+    ('USR-007', 'Ellen Ripley', 'Technician', None, None),
+    ('USR-008', 'Cooper', 'Technician', None, None)
 ]
+cursor.executemany("INSERT INTO users VALUES (?,?,?,?,?)", users)
 
+# 3. DATE HELPERS
+today = datetime.today()
+cal_good = (today + timedelta(days=120)).strftime('%Y-%m-%d')
+cal_soon = (today + timedelta(days=15)).strftime('%Y-%m-%d')
+cal_bad  = (today - timedelta(days=5)).strftime('%Y-%m-%d')
+
+# 4. GENERATE TOOLS (The Fleet)
+tools_data = []
+
+def generate_tools(prefix, model, name, count):
+    for i in range(1, count + 1):
+        tool_id = f"{prefix}-{i:03d}" # e.g., DR-001, DR-002
+        
+        # 90% chance tool is perfect, 10% chance it has issues
+        r = random.random()
+        if r > 0.95:
+            status = 'Under Maintenance'
+            cal = cal_good
+        elif r > 0.90:
+            status = 'Overdue'
+            cal = cal_bad
+        else:
+            status = 'Available'
+            cal = cal_good if r > 0.2 else cal_soon
+            
+        tools_data.append((tool_id, model, name, status, None, cal))
+
+# --- FLEET CONFIGURATION ---
+# We need enough for 20 concurrent users. 
+# If everyone needs a drill, we need 20+ drills.
+
+generate_tools('DR', 'M-DRILL', 'Pneumatic Drill', 25)           # 25 Drills
+generate_tools('RT', 'M-RIVET', 'Rivet Gun (Pneumatic)', 25)     # 25 Rivet Guns
+generate_tools('TW', 'M-TW-DIG', 'Digital Torque Wrench', 25)    # 25 Torque Wrenches
+generate_tools('MM', 'M-MULTI', 'Digital Multimeter', 25)        # 25 Multimeters
+generate_tools('CAL', 'M-CAL', 'Pressure Calibrator', 20)        # 20 Calibrators
+generate_tools('SK', 'M-SOCK', 'Socket Wrench Set', 20)          # 20 Socket Sets
+generate_tools('CL', 'M-CLAMP', 'Current Clamp Meter', 10)       # 10 Clamp Meters
+generate_tools('BO', 'M-BORE', 'Borescope Camera', 8)            # 8 Borescopes
+generate_tools('VT', 'M-VID', 'Video Inspection Probe', 5)       # 5 Video Probes
+
+# Add a few specific ones for testing alerts/specific scenarios
+tools_data.append(('ALERT-01', 'M-TEST', 'Overdue Checkout Tool', 'In Use', 'USR-002', cal_good))
+tools_data.append(('AI-TEST', 'M-AI', 'AI Calibration Test Tool', 'Available', None, (today + timedelta(days=7)).strftime('%Y-%m-%d')))
+
+# Insert all generated tools
 for tool in tools_data:
-    cur.execute("""
-        INSERT INTO tools (id, name, status, current_holder, calibration_due, total_checkouts, total_usage_hours)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+    cursor.execute("""
+        INSERT INTO tools (id, model, name, status, current_holder, calibration_due)
+        VALUES (?, ?, ?, ?, ?, ?)
     """, tool)
 
-# === TRANSACTIONS ===
-cur.execute("""
-    INSERT INTO transactions (user_id, tool_id, type, timestamp)
-    VALUES (?, ?, ?, ?)
-""", ('USR-002', 'ALERT-01', 'checkout', long_checkout_time))
-
-cur.execute("""
-    INSERT INTO transactions (user_id, tool_id, type, timestamp)
-    VALUES (?, ?, ?, datetime('now', '-2 hours'))
-""", ('USR-003', 'CL-001', 'checkout'))
-
-cur.execute("""
-    INSERT INTO transactions (user_id, tool_id, type, timestamp)
-    VALUES (?, ?, ?, datetime('now', '-1 hour'))
-""", ('USR-002', 'TW-001', 'checkin'))
-
-# === AUDIT LOG ENTRIES ===
-cur.execute('''
-    INSERT INTO audit_log (user_id, action, details)
-    VALUES (?, ?, ?)
-''', ('USR-001', 'EMERGENCY_UNLOCK', '{"reason": "NFC reader failure", "tool_id": "TW-004"}'))
-
-cur.execute('''
-    INSERT INTO audit_log (user_id, action, details)
-    VALUES (?, ?, ?)
-''', ('USR-002', 'TOOL_CHECKOUT', '{"tool_id": "TW-003"}'))
-
-# === PROJECTS ===
+# 5. SEED PROJECTS (Full List 001-017)
 projects_data = [
-    ('PROJ-A', 'A320 Wing Inspection', 'Perform a detailed visual and torque inspection on the left wing of the A320. Ensure all access panels are secure and torque settings are within tolerance.', '["TW-001", "MM-001", "BO-001"]'),
-    ('PROJ-B', 'Engine Overhaul Prep', 'Prepare the CFM56 engine for scheduled overhaul. Perform pre-removal checks and document all sensor readings.', '["CAL-001", "TACH-01", "PS-001"]'),
-    ('PROJ-C', 'Landing Gear Service', 'Service and inspect the main landing gear. Check hydraulic fluid levels, inspect for leaks, and verify locking mechanism.', '["GAUGE-01", "FLUX-01", "VT-001"]')
+    ('PROJ-001', 'T-Profile with Cutout', 'Standard operating procedure for T-Profile with Cutout', 
+     json.dumps(["M-MULTI", "M-TW-DIG", "M-RIVET"])),
+
+    ('PROJ-002', 'Cutting Exercise', 'Standard operating procedure for Cutting Exercise', 
+     json.dumps(["M-CAL", "M-MULTI", "M-RIVET", "M-DRILL"])),
+
+    ('PROJ-003', 'Riveting by Hand', 'Standard operating procedure for Riveting by Hand', 
+     json.dumps(["M-CAL", "M-TW-DIG", "M-DRILL", "M-RIVET"])),
+
+    ('PROJ-004', 'Sandwich', 'Standard operating procedure for Sandwich', 
+     json.dumps(["M-DRILL", "M-MULTI", "M-RIVET", "M-TW-DIG"])),
+
+    ('PROJ-005', 'Sheet Metal Shape', 'Standard operating procedure for Sheet Metal Shape', 
+     json.dumps(["M-DRILL", "M-MULTI", "M-RIVET"])),
+
+    ('PROJ-006', 'Screw Installation', 'Standard operating procedure for Screw Installation', 
+     json.dumps(["M-CAL", "M-DRILL", "M-TW-DIG"])),
+
+    ('PROJ-007', 'Drill Panel 3/4/5', 'Standard operating procedure for Drill Panel 3/4/5', 
+     json.dumps(["M-DRILL", "M-MULTI", "M-TW-DIG", "M-CAL"])),
+
+    ('PROJ-008', 'Third Hand Assembly', 'Standard operating procedure for Third Hand Assembly', 
+     json.dumps(["M-RIVET", "M-DRILL", "M-MULTI"])),
+
+    ('PROJ-009', 'Drill Panel 1', 'Standard operating procedure for Drill Panel 1', 
+     json.dumps(["M-TW-DIG", "M-RIVET", "M-MULTI"])),
+
+    ('PROJ-010', 'Drill Plate Aluminium', 'Standard operating procedure for Drill Plate Aluminium', 
+     json.dumps(["M-RIVET", "M-TW-DIG"])),
+
+    ('PROJ-011', 'Drill Panel 2', 'Standard operating procedure for Drill Panel 2', 
+     json.dumps(["M-RIVET", "M-CAL", "M-TW-DIG"])),
+
+    ('PROJ-012', 'Drill Plate Plexiglass', 'Standard operating procedure for Drill Plate Plexiglass', 
+     json.dumps(["M-RIVET", "M-TW-DIG"])),
+
+    ('PROJ-013', 'Structure Project', 'Standard operating procedure for Structure Project', 
+     json.dumps(["M-CAL", "M-MULTI", "M-DRILL"])),
+
+    ('PROJ-014', 'Hi-Lok', 'Standard operating procedure for Hi-Lok', 
+     json.dumps(["M-CAL", "M-RIVET"])),
+
+    ('PROJ-015', 'Hydraulic Jack Project', 'Standard operating procedure for Hydraulic Jack Project', 
+     json.dumps(["M-MULTI", "M-TW-DIG", "M-DRILL"])),
+
+    ('PROJ-016', 'SPS- Stabilised Power Supply', 'Standard operating procedure for SPS', 
+     json.dumps(["M-MULTI", "M-CAL", "M-TW-DIG", "M-RIVET"])),
+
+    ('PROJ-017', 'FMP - Flap Mechanism Project', 'Standard operating procedure for FMP', 
+     json.dumps(["M-RIVET", "M-MULTI"]))
 ]
 
 for project in projects_data:
-    cur.execute("""
-        INSERT INTO projects (id, name, briefing, tool_list)
-        VALUES (?, ?, ?, ?)
-    """, project)
+    cursor.execute("INSERT INTO projects (id, name, briefing, tool_list) VALUES (?, ?, ?, ?)", project)
 
-# === COMMIT ===
+# 6. SEED AUDIT LOG
+cursor.execute("INSERT INTO audit_log (user_id, action, details) VALUES (?, ?, ?)", 
+               ('USR-001', 'SYSTEM_RESET', f'Mass Inventory Generated: {len(tools_data)} Tools'))
+
 connection.commit()
 connection.close()
 
-print("✅ Database initialized with 23 tools, 4 users, 3 projects, transactions, and audit log.")
+print(f"✅ Database initialized with {len(tools_data)} tools (High Volume) and {len(projects_data)} projects.")

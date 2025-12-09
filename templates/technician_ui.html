@@ -2,530 +2,537 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Smart Tool Station</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Smart Tool Station - Technician</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        .action-card {
-            transition: all 0.2s ease-in-out;
-            min-height: 120px;
+        /* === CUSTOM STYLES === */
+        body { font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; }
+        .no-select { user-select: none; -webkit-user-select: none; }
+
+        /* Card Interactions */
+        .action-card { transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
+        .action-card:active { transform: scale(0.98); background-color: #f8fafc; }
+
+        /* NFC Animation */
+        .nfc-pulse { animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite; }
+        @keyframes pulse-ring {
+            0% { transform: scale(0.8); opacity: 0.8; }
+            50% { opacity: 0.5; }
+            100% { transform: scale(2); opacity: 0; }
         }
-        .action-card:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 6px 12px rgba(0,0,0,0.15);
-        }
-        .tool-card {
-            transition: all 0.2s ease-in-out;
-        }
-        .tool-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-        }
-        .status-go { background-color: #dcfce7; color: #166534; }
-        .status-warning { background-color: #fef9c3; color: #854d0e; }
-        .status-no-go { background-color: #fecaca; color: #b91c1c; }
-        .status-overdue { background-color: #ddd6fe; color: #7e22ce; }
-        .nfc-icon {
-            font-size: 4rem;
-            color: #3b82f6;
-            margin-bottom: 1rem;
-        }
+
+        /* Scrollbar Polish */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        /* Modal Backdrop */
+        .modal-backdrop { background-color: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); }
     </style>
 </head>
-<body class="bg-gray-100 h-screen flex items-center justify-center p-2 md:p-4">
-    <div id="main-screen" class="w-full max-w-6xl bg-white rounded-xl shadow-lg p-3 md:p-5">
+<body class="bg-slate-50 h-screen w-screen overflow-hidden text-slate-800 no-select">
+
+    <div id="app-container" class="h-full w-full flex flex-col relative">
         
-        <div id="idle-screen" class="text-center py-10">
-            <h1 class="text-3xl font-bold mb-2">Smart Tool Station</h1>
-            <p class="text-gray-600 mb-8">Please authenticate by tapping your NFC card.</p>
-            
-            <div class="flex flex-col items-center max-w-md mx-auto">
-                <div class="nfc-icon animate-pulse">📡</div>
-                
-                <div class="w-full bg-yellow-50 border border-yellow-200 p-4 rounded-lg mb-4">
-                    <label class="block text-xs font-bold text-yellow-700 uppercase mb-2">⚠️ Simulation Mode: Select User</label>
-                    <select id="simulated-user-select" class="w-full p-3 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 outline-none">
-                        <option value="">Loading users...</option>
+        <div id="idle-screen" class="flex-1 flex flex-col items-center justify-center bg-white z-50">
+            <div class="text-center space-y-2 mb-12">
+                <h1 class="text-5xl font-extrabold text-slate-900 tracking-tight">Smart Tool Station</h1>
+                <p class="text-slate-500 text-xl font-medium">Restricted Access • Technician Only</p>
+            </div>
+
+            <div class="relative flex items-center justify-center w-64 h-64 mb-12">
+                <div class="absolute inset-0 bg-blue-100 rounded-full nfc-pulse"></div>
+                <div class="absolute inset-8 bg-blue-200 rounded-full nfc-pulse" style="animation-delay: 0.5s"></div>
+                <div class="relative z-10 bg-white p-10 rounded-full shadow-2xl border-4 border-white">
+                    <i class="fas fa-wifi text-8xl text-blue-600"></i>
+                </div>
+            </div>
+
+            <p class="text-slate-400 font-mono text-base mb-8 animate-pulse font-medium">Waiting for NFC Tag...</p>
+
+            <div class="absolute bottom-8 left-0 right-0 flex justify-center opacity-80 hover:opacity-100 transition-opacity">
+                <div class="bg-slate-100 p-2 rounded-xl flex gap-2 border border-slate-200 shadow-sm">
+                    <select id="sim-user-select" class="p-2 pr-8 border-none bg-transparent text-sm font-bold text-slate-600 focus:ring-0 cursor-pointer">
+                        <option>Loading users...</option>
                     </select>
+                    <button id="sim-login-btn" class="bg-slate-800 text-white px-6 py-2 rounded-lg text-sm font-bold hover:bg-slate-700 transition shadow">
+                        Simulate Tap
+                    </button>
                 </div>
+            </div>
+        </div>
 
-                <button id="tap-card-btn" class="w-full bg-blue-600 text-white py-4 text-lg rounded-lg font-bold hover:bg-blue-700 transition shadow-lg flex items-center justify-center">
-                    <span class="mr-3 text-2xl">👉</span> Simulate NFC Tap
+        <div id="dashboard-screen" class="hidden flex-col h-full bg-slate-50">
+            <header class="bg-white px-8 py-5 shadow-sm border-b border-slate-200 flex justify-between items-center flex-none">
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xl font-bold">
+                        <i class="fas fa-user"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-2xl font-bold text-slate-800 leading-none mb-1">Welcome, <span id="user-name" class="text-blue-600">Technician</span></h2>
+                        <p class="text-slate-500 text-sm font-medium">Ready for tasks</p>
+                    </div>
+                </div>
+                <button onclick="logout()" class="group flex items-center gap-3 text-slate-500 hover:text-red-600 font-bold transition px-5 py-3 rounded-xl hover:bg-red-50">
+                    <span>Log Out</span>
+                    <i class="fas fa-sign-out-alt group-hover:translate-x-1 transition-transform"></i>
                 </button>
-            </div>
-        </div>
+            </header>
 
-        <div id="auth-dashboard" class="hidden">
-            <div class="flex justify-between items-center mb-6 border-b pb-4">
-                <div>
-                    <h1 class="text-2xl font-bold">Welcome, <span id="welcome-user-name" class="text-blue-600">User</span>!</h1>
-                    <p class="text-sm text-gray-500">Session Active</p>
-                </div>
-                <button id="logout-btn" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded font-medium">Log Out</button>
-            </div>
-
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-4">
-                <div id="checkout-card" class="action-card p-6 border-2 border-blue-100 rounded-xl bg-blue-50 cursor-pointer flex flex-col items-center justify-center hover:border-blue-300">
-                    <div class="text-blue-600 text-5xl mb-3">🧰</div>
-                    <h2 class="text-xl font-bold text-center text-blue-900">Check Out Tools</h2>
-                    <p class="text-blue-600/80 text-center mt-1 text-sm">Start project or select items</p>
-                </div>
-                <div id="return-card" class="action-card p-6 border-2 border-green-100 rounded-xl bg-green-50 cursor-pointer flex flex-col items-center justify-center hover:border-green-300">
-                    <div class="text-green-600 text-5xl mb-3">↩️</div>
-                    <h2 class="text-xl font-bold text-center text-green-900">Return Tools</h2>
-                    <p class="text-green-600/80 text-center mt-1 text-sm">Return checked-out items</p>
-                </div>
-                <div id="emergency-card" class="action-card p-6 border-2 border-red-100 rounded-xl bg-red-50 cursor-pointer flex flex-col items-center justify-center hover:border-red-300">
-                    <div class="text-red-600 text-5xl mb-3">🆘</div>
-                    <h2 class="text-xl font-bold text-center text-red-900">Report Issue</h2>
-                    <p class="text-red-600/80 text-center mt-1 text-sm">Report damage or loss</p>
-                </div>
-            </div>
-        </div>
-
-        <div id="checkout-section" class="hidden">
-            <div class="flex justify-between items-center mb-6">
-                <h2 class="text-2xl font-bold">Check Out Tools</h2>
-                <button id="back-to-dashboard-checkout" class="text-blue-600 hover:text-blue-800 font-medium">← Back to Dashboard</button>
-            </div>
-
-            <div id="project-view" class="mb-4">
-                <div class="flex justify-between items-center mb-4">
-                    <h3 class="text-lg font-semibold text-gray-700">Select a Project:</h3>
-                    <button id="show-overall-tools-btn" class="text-blue-600 hover:underline text-sm font-medium">Skip to All Tools</button>
-                </div>
-                <div id="projects-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+            <main class="flex-1 p-8 flex items-center justify-center">
+                <div class="grid grid-cols-3 gap-8 w-full max-w-6xl h-full max-h-[500px]">
+                    <div onclick="navTo('checkout')" class="action-card bg-white rounded-3xl shadow-sm border-2 border-slate-100 p-8 flex flex-col items-center justify-center text-center cursor-pointer hover:border-blue-300 hover:shadow-xl relative overflow-hidden group">
+                        <div class="w-24 h-24 bg-blue-50 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                            <i class="fas fa-toolbox text-4xl text-blue-600"></i>
+                        </div>
+                        <h3 class="text-3xl font-bold text-slate-800 mb-2">Check Out</h3>
+                        <p class="text-slate-500 font-medium">Get tools & kits</p>
                     </div>
-            </div>
 
-            <div id="project-details-view" class="hidden mb-4">
-                <button id="back-to-projects-btn" class="mb-4 text-sm text-gray-500 hover:text-gray-800 font-medium">← Back to Projects</button>
-                <div class="bg-blue-50 p-4 rounded-lg mb-4 border border-blue-100">
-                    <h3 class="text-xl font-bold text-blue-900 mb-1" id="project-detail-name">[Project Name]</h3>
-                    <p class="text-blue-800 text-sm" id="project-detail-briefing">[Project Briefing]</p>
-                </div>
-                
-                <h4 class="font-bold text-gray-700 mb-3">Required Tools:</h4>
-                <div id="project-tools-list" class="space-y-3 mb-6">
+                    <div onclick="navTo('return')" class="action-card bg-white rounded-3xl shadow-sm border-2 border-slate-100 p-8 flex flex-col items-center justify-center text-center cursor-pointer hover:border-green-300 hover:shadow-xl relative overflow-hidden group">
+                        <div class="w-24 h-24 bg-green-50 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                            <i class="fas fa-undo text-4xl text-green-600"></i>
+                        </div>
+                        <h3 class="text-3xl font-bold text-slate-800 mb-2">Return</h3>
+                        <p class="text-slate-500 font-medium">Check-in items</p>
                     </div>
-                <div class="flex space-x-3">
-                    <button id="checkout-selected-tools-btn" class="flex-1 bg-green-600 hover:bg-green-700 text-white py-3 text-lg rounded-lg font-bold shadow transition">Checkout Selected</button>
-                    <button id="checkout-all-tools-btn" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 text-lg rounded-lg font-bold shadow transition">Checkout All</button>
-                </div>
-            </div>
 
-            <div id="overall-tools-view" class="hidden">
-                <div class="flex justify-between items-center mb-4">
-                    <h3 class="text-lg font-semibold text-gray-700">Available Inventory:</h3>
-                    <button id="back-to-projects-from-overall-btn" class="text-blue-600 hover:underline font-medium">Back to Projects</button>
-                </div>
-                <div id="overall-tools-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-6">
+                    <div onclick="navTo('report')" class="action-card bg-white rounded-3xl shadow-sm border-2 border-slate-100 p-8 flex flex-col items-center justify-center text-center cursor-pointer hover:border-red-300 hover:shadow-xl relative overflow-hidden group">
+                        <div class="w-24 h-24 bg-red-50 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                            <i class="fas fa-exclamation-triangle text-4xl text-red-600"></i>
+                        </div>
+                        <h3 class="text-3xl font-bold text-slate-800 mb-2">Report</h3>
+                        <p class="text-slate-500 font-medium">Flag defects</p>
                     </div>
-                <button id="manual-checkout-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 text-xl rounded-lg font-bold shadow-lg transition">Confirm Selection</button>
+                </div>
+            </main>
+        </div>
+
+        <div id="checkout-screen" class="hidden flex-col h-full bg-slate-50">
+            <header class="bg-white px-6 py-4 shadow-sm border-b border-slate-200 flex justify-between items-center flex-none z-20">
+                <div class="flex items-center gap-4">
+                    <button onclick="navTo('dashboard')" class="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center hover:bg-slate-200 active:scale-95 transition text-slate-600">
+                        <i class="fas fa-arrow-left text-lg"></i>
+                    </button>
+                    <h2 class="text-2xl font-bold text-slate-800">Check Out</h2>
+                </div>
+                <div class="bg-slate-100 p-1.5 rounded-xl flex shadow-inner">
+                    <button onclick="switchCheckoutMode('project')" id="tab-project" class="px-6 py-2.5 rounded-lg text-sm font-bold shadow-sm bg-white text-blue-700 transition-all">Projects</button>
+                    <button onclick="switchCheckoutMode('all')" id="tab-all" class="px-6 py-2.5 rounded-lg text-sm font-bold text-slate-500 hover:text-slate-700 transition-all">All Tools</button>
+                </div>
+            </header>
+
+            <main class="flex-1 overflow-y-auto p-6">
+                <div id="view-projects" class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"></div>
+
+                <div id="view-project-detail" class="hidden h-full flex flex-col max-w-5xl mx-auto bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden">
+                    <div class="p-8 border-b border-slate-100 bg-blue-50/50 flex-none">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <h3 id="proj-det-name" class="text-3xl font-bold text-slate-900 mb-2">Project Name</h3>
+                                <p id="proj-det-brief" class="text-slate-600 text-lg">Briefing details...</p>
+                            </div>
+                            <div class="bg-blue-100 text-blue-700 font-bold px-4 py-2 rounded-lg text-sm">PROJ KIT</div>
+                        </div>
+                    </div>
+                    <div class="p-8 flex-1 overflow-y-auto">
+                        <h4 class="font-bold text-slate-400 mb-4 uppercase text-xs tracking-wider">Required Models & Assignments</h4>
+                        <div id="proj-det-list" class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6"></div>
+                    </div>
+                    <div class="p-6 border-t border-slate-100 bg-slate-50 flex gap-4 flex-none">
+                        <button onclick="switchCheckoutMode('project')" class="px-8 py-4 border-2 border-slate-300 rounded-xl font-bold text-slate-600 hover:bg-white transition">Cancel</button>
+                        <button onclick="checkoutProjectBatch()" class="flex-1 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white py-4 rounded-xl font-bold text-lg shadow-lg transition flex items-center justify-center gap-3">
+                            <span>Confirm Checkout</span><i class="fas fa-arrow-right"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div id="view-all-tools" class="hidden grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4"></div>
+            </main>
+        </div>
+
+        <div id="return-screen" class="hidden flex-col h-full bg-slate-50">
+             <header class="bg-white px-6 py-4 shadow-sm border-b border-slate-200 flex justify-between items-center flex-none z-20">
+                <div class="flex items-center gap-4">
+                    <button onclick="navTo('dashboard')" class="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center hover:bg-slate-200 active:scale-95 transition text-slate-600">
+                        <i class="fas fa-arrow-left text-lg"></i>
+                    </button>
+                    <div>
+                        <h2 class="text-2xl font-bold text-slate-800">Return Tools</h2>
+                        <p class="text-sm text-slate-500 font-medium">Select items to check in</p>
+                    </div>
+                </div>
+                <label class="flex items-center gap-3 bg-slate-100 px-4 py-2 rounded-lg cursor-pointer hover:bg-slate-200 transition select-none">
+                    <input type="checkbox" id="return-select-all" class="w-5 h-5 rounded text-blue-600 focus:ring-blue-500 border-slate-300">
+                    <span class="text-sm font-bold text-slate-700">Select All</span>
+                </label>
+            </header>
+
+            <main class="flex-1 overflow-y-auto p-6 pb-32">
+                <div id="return-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+                <div id="return-empty" class="hidden h-full flex flex-col items-center justify-center text-slate-400">
+                    <div class="w-24 h-24 bg-slate-100 rounded-full flex items-center justify-center mb-4">
+                        <i class="fas fa-check text-4xl text-slate-300"></i>
+                    </div>
+                    <p class="text-lg font-medium">No tools currently checked out.</p>
+                </div>
+            </main>
+
+            <div id="return-footer" class="absolute bottom-8 left-0 right-0 flex justify-center hidden z-30 pointer-events-none">
+                <div class="bg-slate-900 text-white p-2 pl-6 rounded-2xl shadow-2xl flex items-center gap-6 pointer-events-auto transform transition-all hover:scale-105">
+                    <div class="font-bold flex items-center gap-2">
+                        <span id="return-count" class="bg-blue-500 min-w-[1.5rem] h-6 px-1 rounded-md text-sm flex items-center justify-center">0</span> 
+                        <span>Selected</span>
+                    </div>
+                    <button onclick="openReturnModal()" class="bg-white text-slate-900 px-8 py-3 rounded-xl font-bold hover:bg-blue-50 transition flex items-center gap-2">
+                        Return Items <i class="fas fa-arrow-right"></i>
+                    </button>
+                </div>
             </div>
         </div>
 
-        <div id="return-section" class="hidden">
-            <div class="flex justify-between items-center mb-6">
-                <h2 class="text-2xl font-bold">Return Tools</h2>
-                <button id="back-to-dashboard-return" class="text-blue-600 hover:text-blue-800 font-medium">← Back to Dashboard</button>
+    </div>
+
+    <div id="modal-report" class="hidden fixed inset-0 modal-backdrop z-50 flex items-center justify-center p-6">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-red-50">
+                <h3 class="text-xl font-bold text-red-800 flex items-center gap-2"><i class="fas fa-exclamation-circle"></i> Report Issue</h3>
+                <button onclick="closeModal('modal-report')" class="w-8 h-8 rounded-full bg-red-100 text-red-500 hover:bg-red-200 flex items-center justify-center"><i class="fas fa-times"></i></button>
             </div>
-            <div id="return-tools-list" class="space-y-3 mb-4">
+            
+            <div class="flex-1 overflow-y-auto p-8">
+                <div id="rep-step-1">
+                    <p class="mb-4 text-slate-500 font-bold text-sm uppercase tracking-wide">Select Defective Tool</p>
+                    <div id="rep-my-tools" class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-8"></div>
+                    <div class="relative mb-2">
+                        <i class="fas fa-search absolute left-4 top-3.5 text-slate-400"></i>
+                        <input type="text" id="rep-search" placeholder="Search entire inventory..." class="w-full pl-12 p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-red-500 outline-none" onkeyup="filterReportTools()">
+                    </div>
+                    <div id="rep-all-tools" class="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-40 overflow-y-auto pr-2"></div>
                 </div>
-            <div id="no-tools-message" class="hidden flex flex-col items-center justify-center py-12 text-gray-400">
-                <div class="text-6xl mb-4">🎉</div>
-                <p class="text-xl font-medium">No tools currently checked out.</p>
+
+                <div id="rep-step-2" class="hidden">
+                    <div class="flex items-start gap-4 mb-6">
+                        <button onclick="repStep(1)" class="mt-1 text-slate-400 hover:text-slate-600"><i class="fas fa-arrow-left"></i> Back</button>
+                        <div class="bg-red-50 p-4 rounded-xl border border-red-100 flex-1">
+                            <span class="text-xs font-bold text-red-400 uppercase tracking-wider">Reporting Issue For</span>
+                            <div id="rep-tool-name" class="text-xl font-bold text-red-900 mt-1">Tool Name</div>
+                        </div>
+                    </div>
+                    <div class="space-y-4">
+                        <label class="block text-sm font-bold text-slate-700 mb-2">Defect Type</label>
+                        <select id="rep-type" class="w-full p-4 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-red-500 outline-none">
+                            <option>Physical Damage</option><option>Calibration Error</option><option>Battery Issue</option><option>Other</option>
+                        </select>
+                        <label class="block text-sm font-bold text-slate-700 mb-2">Description</label>
+                        <textarea id="rep-desc" rows="3" class="w-full p-4 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-red-500 outline-none resize-none"></textarea>
+                    </div>
+                </div>
+            </div>
+            <div class="p-6 border-t border-slate-100 bg-slate-50 flex justify-end">
+                <button id="btn-submit-rep" onclick="submitReport()" class="bg-red-600 hover:bg-red-700 text-white px-8 py-4 rounded-xl font-bold shadow-lg hidden w-full md:w-auto">Submit Report</button>
             </div>
         </div>
+    </div>
 
-        <div id="return-verification-modal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 hidden backdrop-blur-sm">
-            <div class="bg-white rounded-2xl p-8 w-11/12 max-w-md shadow-2xl text-center">
-                <div class="text-6xl mb-4">📥</div>
-                <h3 class="text-2xl font-bold mb-2">Place Tool in Box</h3>
-                <p class="text-gray-600 mb-8">Please place the tool back inside the Smart Box and close the door for verification.</p>
-                <div class="flex space-x-3">
-                    <button id="cancel-verification-btn" class="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-3 rounded-lg font-bold">Cancel</button>
-                    <button id="simulate-verification-btn" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-bold shadow">Simulate Door Close</button>
-                </div>
-            </div>
-        </div>
-
-        <div id="return-confirmation-modal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 hidden backdrop-blur-sm">
-            <div class="bg-white rounded-2xl p-8 w-11/12 max-w-md shadow-2xl">
-                <h3 class="text-2xl font-bold mb-4 border-b pb-2">Confirm Return</h3>
-                <p class="text-gray-500 text-sm mb-1">Tool Detected:</p>
-                <p id="confirm-tool-name" class="text-xl font-bold text-blue-900 mb-6 bg-blue-50 p-3 rounded border border-blue-100">Tool Name</p>
-                
-                <div class="mb-6 p-3 border border-red-200 bg-red-50 rounded-lg">
-                    <label class="flex items-center cursor-pointer">
-                        <input type="checkbox" id="report-issue-checkbox" class="w-5 h-5 text-red-600 rounded focus:ring-red-500 mr-3">
-                        <span class="font-medium text-red-800">Report Damage / Issue?</span>
-                    </label>
-                </div>
-                
-                <div class="flex space-x-3">
-                    <button id="back-to-verification-btn" class="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-3 rounded-lg font-bold">Back</button>
-                    <button id="confirm-return-btn" class="flex-1 bg-green-600 hover:bg-green-700 text-white py-3 rounded-lg font-bold shadow">Confirm Check-In</button>
-                </div>
+    <div id="modal-return-verify" class="hidden fixed inset-0 modal-backdrop z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl shadow-2xl p-8 text-center max-w-md w-full border-4 border-white">
+            <div class="w-24 h-24 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-6"><i class="fas fa-box-open text-5xl text-green-600"></i></div>
+            <h3 class="text-2xl font-bold text-slate-900 mb-2">Return Tools</h3>
+            <p class="text-slate-500 mb-8 leading-relaxed">Place the selected tools securely back into the Smart Box.</p>
+            <div class="flex gap-4">
+                <button onclick="closeModal('modal-return-verify')" class="flex-1 py-4 text-slate-600 font-bold hover:bg-slate-50 rounded-xl">Cancel</button>
+                <button onclick="submitReturn()" class="flex-1 bg-green-600 hover:bg-green-700 text-white py-4 rounded-xl font-bold shadow-lg">Confirm</button>
             </div>
         </div>
     </div>
 
     <script>
+        // === STATE ===
         let currentUser = null;
+        let allTools = [];
+        let allProjects = [];
+        let returnSelection = new Set();
         let currentProjectId = null;
-        let selectedToolForManualCheckout = null;
-        let toolToReturn = null;
-        let toolToReturnName = "";
+        let reportSelectedTool = null;
 
-        // DOM Elements
-        const mainScreen = document.getElementById('main-screen');
-        const idleScreen = document.getElementById('idle-screen');
-        const authDashboard = document.getElementById('auth-dashboard');
-        const checkoutSection = document.getElementById('checkout-section');
-        const returnSection = document.getElementById('return-section');
-        const welcomeUserName = document.getElementById('welcome-user-name');
-        const returnVerificationModal = document.getElementById('return-verification-modal');
-        const returnConfirmationModal = document.getElementById('return-confirmation-modal');
-
-        // --- NEW: Load Users for Simulation ---
-        async function loadSimulatedUsers() {
-            try {
-                const res = await fetch('/api/users?t=' + Date.now());
-                const users = await res.json();
-                const select = document.getElementById('simulated-user-select');
-                select.innerHTML = '';
-                
-                users.forEach(user => {
-                    const option = document.createElement('option');
-                    option.value = user.id;
-                    option.textContent = `${user.name} (${user.role})`;
-                    select.appendChild(option);
-                });
-            } catch (e) {
-                console.error("Failed to load users for simulation", e);
-            }
-        }
-
-        // Call this when page loads
-        document.addEventListener('DOMContentLoaded', loadSimulatedUsers);
-
-        // --- Authentication ---
-        document.getElementById('tap-card-btn').addEventListener('click', () => {
-            const userId = document.getElementById('simulated-user-select').value;
-            if(!userId) { alert("Please wait for users to load or select a user."); return; }
-            authenticateUser(userId);
+        document.addEventListener('DOMContentLoaded', () => {
+            loadSimUsers();
+            setInterval(checkNfc, 1000);
         });
 
-        async function authenticateUser(userId) {
-            const tapBtn = document.getElementById('tap-card-btn');
-            const originalBtnText = tapBtn.innerHTML;
-            tapBtn.innerHTML = '<span class="animate-spin mr-2">🔄</span> Verifying...';
-            tapBtn.disabled = true;
-
+        // --- AUTH ---
+        async function checkNfc() {
+            if(currentUser) return; 
             try {
-                const response = await fetch(`/api/users/${userId}?t=${Date.now()}`);
-                if (response.ok) {
-                    const userData = await response.json();
-                    currentUser = userData;
-                    showAuthenticatedDashboard();
-                } else {
-                    alert("User not found in database.");
-                }
-            } catch (error) {
-                console.error("Auth error:", error);
-                alert("Error connecting to server.");
-            } finally {
-                tapBtn.innerHTML = originalBtnText;
-                tapBtn.disabled = false;
-            }
+                const res = await fetch('/api/nfc/poll');
+                const data = await res.json();
+                if(data.user_id) login(data.user_id);
+            } catch(e) { }
         }
 
-        function showAuthenticatedDashboard() {
-            idleScreen.classList.add('hidden');
-            authDashboard.classList.remove('hidden');
-            welcomeUserName.textContent = currentUser.name;
-            loadCheckedOutToolsForReturn();
+        async function loadSimUsers() {
+            try {
+                const users = await (await fetch('/api/users')).json();
+                document.getElementById('sim-user-select').innerHTML = users.map(u => `<option value="${u.id}">${u.name}</option>`).join('');
+                document.getElementById('sim-login-btn').onclick = () => login(document.getElementById('sim-user-select').value);
+            } catch(e) { console.log("API Waiting..."); }
         }
 
-        document.getElementById('logout-btn').addEventListener('click', () => {
+        async function login(uid) {
+            const res = await fetch(`/api/users/${uid}`);
+            if(res.ok) {
+                currentUser = await res.json();
+                document.getElementById('user-name').innerText = currentUser.name.split(' ')[0];
+                switchScreen('dashboard');
+            } else { alert("User not found"); }
+        }
+
+        function logout() {
             currentUser = null;
-            authDashboard.classList.add('hidden');
-            checkoutSection.classList.add('hidden');
-            returnSection.classList.add('hidden');
-            returnVerificationModal.classList.add('hidden');
-            returnConfirmationModal.classList.add('hidden');
-            idleScreen.classList.remove('hidden');
-        });
-
-        // --- Dashboard Navigation ---
-        document.getElementById('checkout-card').addEventListener('click', () => {
-            authDashboard.classList.add('hidden');
-            checkoutSection.classList.remove('hidden');
-            loadProjects();
-        });
-
-        document.getElementById('return-card').addEventListener('click', () => {
-            authDashboard.classList.add('hidden');
-            returnSection.classList.remove('hidden');
-            loadCheckedOutToolsForReturn();
-        });
-
-        document.getElementById('back-to-dashboard-checkout').addEventListener('click', () => {
-            checkoutSection.classList.add('hidden');
-            authDashboard.classList.remove('hidden');
-        });
-
-        document.getElementById('back-to-dashboard-return').addEventListener('click', () => {
-            returnSection.classList.add('hidden');
-            authDashboard.classList.remove('hidden');
-        });
-
-        // --- Project & Tool Loading ---
-        async function loadProjects() {
-            const res = await fetch(`/api/projects?t=${Date.now()}`);
-            const projects = await res.json();
-            const projectsGrid = document.getElementById('projects-grid');
-            projectsGrid.innerHTML = '';
-            projects.forEach(p => {
-                const card = document.createElement('div');
-                card.className = 'action-card p-6 border rounded-xl bg-white cursor-pointer flex flex-col items-center justify-center text-center shadow-sm hover:shadow-md';
-                card.innerHTML = `<div class="font-bold text-lg text-gray-800">${p.name}</div>`;
-                card.onclick = () => showProjectDetails(p.id);
-                projectsGrid.appendChild(card);
-            });
+            switchScreen('idle');
         }
 
-        async function showProjectDetails(projectId) {
-            const res = await fetch(`/api/projects/${projectId}?t=${Date.now()}`);
-            const project = await res.json();
-            
-            document.getElementById('project-detail-name').textContent = project.name;
-            document.getElementById('project-detail-briefing').textContent = project.briefing;
-            currentProjectId = projectId;
-            
-            const toolIds = JSON.parse(project.tool_list);
-            const allToolsRes = await fetch(`/api/tools?t=${Date.now()}`);
-            const allTools = await allToolsRes.json();
-            const projectTools = allTools.filter(t => toolIds.includes(t.id));
-            
-            const projectToolsList = document.getElementById('project-tools-list');
-            projectToolsList.innerHTML = '';
-            projectTools.forEach(tool => {
-                const statusInfo = getToolStatusInfo(tool);
-                const toolDiv = document.createElement('div');
-                toolDiv.className = 'tool-card p-4 border rounded-lg bg-white flex items-center shadow-sm';
-                toolDiv.innerHTML = `
-                    <input type="checkbox" class="mr-4 project-tool-checkbox w-6 h-6 text-blue-600 rounded focus:ring-blue-500" value="${tool.id}">
-                    <div class="flex-1">
-                        <div class="font-mono text-xs text-gray-500">${tool.id}</div>
-                        <div class="font-bold text-gray-800">${tool.name}</div>
-                        <span class="${statusInfo.class} text-xs px-2 py-1 rounded mt-1 inline-block font-bold">${statusInfo.text}</span>
+        function switchScreen(screenName) {
+            ['idle', 'dashboard', 'checkout', 'return'].forEach(s => {
+                const el = document.getElementById(`${s}-screen`);
+                el.classList.remove('flex');
+                el.classList.add('hidden');
+            });
+            const target = document.getElementById(`${screenName}-screen`);
+            target.classList.remove('hidden');
+            target.classList.add('flex');
+        }
+
+        function navTo(page) {
+            if(page === 'checkout') loadCheckout();
+            if(page === 'return') loadReturn();
+            if(page === 'report') openReportModal();
+            if(page === 'dashboard') switchScreen('dashboard');
+        }
+
+        // --- CHECKOUT LOGIC ---
+        async function loadCheckout() {
+            switchScreen('checkout');
+            switchCheckoutMode('project');
+            allProjects = await (await fetch('/api/projects')).json();
+            allTools = await (await fetch('/api/tools/available')).json();
+            renderProjects();
+            renderAllTools();
+        }
+
+        function switchCheckoutMode(mode) {
+            const tabProj = document.getElementById('tab-project');
+            const tabAll = document.getElementById('tab-all');
+            const viewProj = document.getElementById('view-projects');
+            const viewDetail = document.getElementById('view-project-detail');
+            const viewAll = document.getElementById('view-all-tools');
+
+            if(mode === 'project') {
+                tabProj.classList.add('bg-white', 'text-blue-700', 'shadow-sm'); tabProj.classList.remove('text-slate-500');
+                tabAll.classList.remove('bg-white', 'text-blue-700', 'shadow-sm'); tabAll.classList.add('text-slate-500');
+                viewProj.classList.remove('hidden');
+                viewAll.classList.add('hidden');
+                viewDetail.classList.add('hidden');
+            } else {
+                tabAll.classList.add('bg-white', 'text-blue-700', 'shadow-sm'); tabAll.classList.remove('text-slate-500');
+                tabProj.classList.remove('bg-white', 'text-blue-700', 'shadow-sm'); tabProj.classList.add('text-slate-500');
+                viewProj.classList.add('hidden');
+                viewDetail.classList.add('hidden');
+                viewAll.classList.remove('hidden');
+            }
+        }
+
+        function renderProjects() {
+            document.getElementById('view-projects').innerHTML = allProjects.map(p => {
+                const tCount = JSON.parse(p.tool_list).length;
+                return `
+                <div onclick="openProjectDetail('${p.id}')" class="bg-white p-6 rounded-2xl border border-slate-200 cursor-pointer hover:border-blue-400 hover:shadow-lg transition-all active:scale-[0.98]">
+                    <div class="flex items-start justify-between mb-4">
+                        <div class="w-14 h-14 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600 text-2xl font-bold shadow-sm">${p.name.charAt(0)}</div>
+                        <span class="bg-slate-100 text-slate-600 text-xs font-bold px-3 py-1.5 rounded-lg uppercase tracking-wider">${tCount} Models</span>
                     </div>
-                `;
-                projectToolsList.appendChild(toolDiv);
-            });
+                    <h3 class="font-bold text-slate-800 text-lg leading-tight mb-1 line-clamp-1">${p.name}</h3>
+                    <p class="text-slate-500 text-sm line-clamp-2">${p.briefing}</p>
+                </div>`;
+            }).join('');
+        }
+
+        function renderAllTools() {
+            document.getElementById('view-all-tools').innerHTML = allTools.map(t => `
+                <div onclick="checkoutSingle('${t.id}')" class="bg-white p-5 rounded-2xl border border-slate-200 cursor-pointer hover:border-blue-500 hover:shadow-lg transition-all active:scale-[0.98] flex flex-col justify-between min-h-[140px]">
+                    <div>
+                        <p class="text-xs font-bold font-mono text-slate-400 mb-2">${t.id}</p>
+                        <h4 class="font-bold text-slate-700 text-base leading-tight">${t.name}</h4>
+                    </div>
+                    <div class="mt-4 flex justify-end"><div class="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center"><i class="fas fa-plus"></i></div></div>
+                </div>
+            `).join('');
+        }
+
+        // === NEW DYNAMIC PROJECT LOGIC ===
+        async function openProjectDetail(pid) {
+            const p = allProjects.find(x => x.id === pid);
+            currentProjectId = pid;
             
-            document.getElementById('project-view').classList.add('hidden');
-            document.getElementById('project-details-view').classList.remove('hidden');
-        }
-
-        function getToolStatusInfo(tool) {
-            if (tool.status !== 'Available') {
-                return { class: 'status-no-go', text: '⛔ UNAVAILABLE' };
-            }
-            if (tool.status === 'Overdue') {
-                return { class: 'status-no-go', text: '⛔ OVERDUE' };
-            } else if (new Date(tool.calibration_due) < new Date()) {
-                return { class: 'status-overdue', text: '⚠️ CALIBRATION DUE' };
-            } else if (new Date(tool.calibration_due) < new Date(Date.now() + 7 * 86400000)) {
-                return { class: 'status-warning', text: '⚠️ DUE SOON' };
-            } else {
-                return { class: 'status-go', text: '✅ READY' };
-            }
-        }
-
-        async function loadOverallTools() {
-            const res = await fetch(`/api/tools/available?t=${Date.now()}`);
-            const tools = await res.json();
-            const overallToolsGrid = document.getElementById('overall-tools-grid');
-            renderToolGrid(tools, overallToolsGrid);
-            document.getElementById('project-view').classList.add('hidden');
-            document.getElementById('overall-tools-view').classList.remove('hidden');
-        }
-
-        function renderToolGrid(tools, gridElement) {
-            gridElement.innerHTML = '';
-            tools.forEach(tool => {
-                const statusInfo = getToolStatusInfo(tool);
-                const card = document.createElement('div');
-                card.className = 'tool-card p-4 border rounded-lg bg-white cursor-pointer shadow-sm hover:shadow-md';
-                card.innerHTML = `
-                    <div class="font-mono text-xs text-gray-500">${tool.id}</div>
-                    <div class="font-bold text-gray-800 mb-2">${tool.name}</div>
-                    <span class="${statusInfo.class} text-xs px-2 py-1 rounded font-bold">${statusInfo.text}</span>
-                `;
-                card.onclick = () => selectToolForManualCheckout(tool);
-                gridElement.appendChild(card);
-            });
-        }
-
-        function selectToolForManualCheckout(tool) {
-            selectedToolForManualCheckout = tool;
-            document.querySelectorAll('#overall-tools-grid .tool-card').forEach(card => {
-                card.classList.remove('border-blue-500', 'bg-blue-50', 'ring-2', 'ring-blue-300');
-            });
-            event.currentTarget.classList.add('border-blue-500', 'bg-blue-50', 'ring-2', 'ring-blue-300');
-        }
-
-        // --- Navigation within Checkout ---
-        document.getElementById('show-overall-tools-btn').onclick = loadOverallTools;
-        document.getElementById('back-to-projects-btn').onclick = () => {
-            document.getElementById('project-details-view').classList.add('hidden');
-            document.getElementById('project-view').classList.remove('hidden');
-        };
-        document.getElementById('back-to-projects-from-overall-btn').onclick = () => {
-            document.getElementById('overall-tools-view').classList.add('hidden');
-            document.getElementById('project-view').classList.remove('hidden');
-        };
-
-        // --- Batch Checkout ---
-        document.getElementById('checkout-selected-tools-btn').onclick = async () => {
-            const selectedIds = Array.from(document.querySelectorAll('.project-tool-checkbox:checked')).map(cb => cb.value);
-            if (selectedIds.length === 0) {
-                alert("Please select at least one tool.");
-                return;
-            }
-            await performBatchCheckout(selectedIds);
-        };
-
-        document.getElementById('checkout-all-tools-btn').onclick = async () => {
-            const allIds = Array.from(document.querySelectorAll('.project-tool-checkbox')).map(cb => cb.value);
-            await performBatchCheckout(allIds);
-        };
-
-        async function performBatchCheckout(toolIds) {
-            const res = await fetch(`/api/projects/${currentProjectId}/checkout`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ user_id: currentUser.id, tool_ids: toolIds })
-            });
-            const result = await res.json();
-            let message = `Batch checkout complete!\n✅ Checked out: ${result.checked_out.length}`;
-            if (result.unavailable.length > 0) message += `\n❌ Unavailable: ${result.unavailable.length}`;
-            alert(message);
-            authDashboard.classList.remove('hidden');
-            checkoutSection.classList.add('hidden');
-            loadCheckedOutToolsForReturn();
-        }
-
-        // --- Manual Checkout ---
-        document.getElementById('manual-checkout-btn').onclick = async () => {
-            if (!selectedToolForManualCheckout) {
-                alert("Please select a tool first.");
-                return;
-            }
-            const res = await fetch('/api/checkout', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ user_id: currentUser.id, tool_id: selectedToolForManualCheckout.id })
-            });
-            if (res.ok) {
-                alert("✅ Checkout successful!");
-                authDashboard.classList.remove('hidden');
-                checkoutSection.classList.add('hidden');
-                loadCheckedOutToolsForReturn();
-            } else {
-                const error = await res.json();
-                alert(`❌ ${error.message}`);
-            }
-        };
-
-        // --- Return Tools Flow ---
-        async function loadCheckedOutToolsForReturn() {
-            if (!currentUser) return;
-            const res = await fetch(`/api/tools?t=${Date.now()}`);
-            const allTools = await res.json();
-            const checkedOutByUser = allTools.filter(t => t.current_holder === currentUser.id && t.status === 'In Use');
-            const returnToolsList = document.getElementById('return-tools-list');
-            const noToolsMessage = document.getElementById('no-tools-message');
+            document.getElementById('view-projects').classList.add('hidden');
+            document.getElementById('view-project-detail').classList.remove('hidden');
             
-            if (checkedOutByUser.length === 0) {
-                noToolsMessage.classList.remove('hidden');
-                returnToolsList.classList.add('hidden');
-            } else {
-                noToolsMessage.classList.add('hidden');
-                returnToolsList.classList.remove('hidden');
-                returnToolsList.innerHTML = '';
-                checkedOutByUser.forEach(tool => {
-                    const toolDiv = document.createElement('div');
-                    toolDiv.className = 'tool-card p-4 border rounded-lg bg-white flex justify-between items-center shadow-sm';
-                    toolDiv.innerHTML = `
-                        <div>
-                            <div class="font-mono text-xs text-gray-500">${tool.id}</div>
-                            <div class="font-bold text-gray-800">${tool.name}</div>
-                            <div class="text-xs text-blue-600 mt-1">Checked out: ${new Date(tool.calibration_due).toLocaleDateString()}</div>
+            document.getElementById('proj-det-name').innerText = p.name;
+            document.getElementById('proj-det-brief').innerText = p.briefing;
+
+            // NEW: Fetch all tools to find availability by MODEL
+            const requiredModels = JSON.parse(p.tool_list);
+            const fullInv = await (await fetch('/api/tools')).json();
+            
+            const list = document.getElementById('proj-det-list');
+            list.innerHTML = requiredModels.map(modelCode => {
+                // Find first available tool of this model
+                const availableTool = fullInv.find(t => t.model === modelCode && t.status === 'Available');
+                const anyTool = fullInv.find(t => t.model === modelCode);
+                const displayName = anyTool ? anyTool.name : "Unknown Tool";
+
+                if (availableTool) {
+                    return `
+                    <label class="flex items-center p-4 border rounded-xl bg-white border-slate-200 hover:border-blue-300 transition-colors cursor-pointer">
+                        <div class="flex items-center justify-center w-6 h-6 mr-4">
+                            <input type="checkbox" class="proj-cb w-5 h-5 rounded text-blue-600 focus:ring-blue-500 border-gray-300" value="${availableTool.id}" checked>
                         </div>
-                        <button class="return-tool-btn bg-green-600 hover:bg-green-700 text-white py-2 px-5 rounded-lg text-sm font-bold shadow transition" 
-                                data-tool-id="${tool.id}" 
-                                data-tool-name="${tool.name}">Return</button>
-                    `;
-                    returnToolsList.appendChild(toolDiv);
-                });
-                
-                document.querySelectorAll('.return-tool-btn').forEach(btn => {
-                    btn.addEventListener('click', async (e) => {
-                        toolToReturn = e.currentTarget.dataset.toolId;
-                        toolToReturnName = e.currentTarget.dataset.toolName;
-                        showReturnVerificationModal();
-                    });
-                });
-            }
+                        <div class="flex-1">
+                            <div class="font-bold text-sm text-slate-800">${displayName}</div>
+                            <div class="text-xs text-blue-600 font-bold font-mono">Assigned: ${availableTool.id}</div>
+                        </div>
+                        <span class="text-[10px] font-bold text-green-700 bg-green-100 px-2 py-1 rounded">READY</span>
+                    </label>`;
+                } else {
+                    return `
+                    <label class="flex items-center p-4 border rounded-xl bg-slate-50 border-slate-100 opacity-60 cursor-not-allowed">
+                        <div class="flex items-center justify-center w-6 h-6 mr-4">
+                            <input type="checkbox" class="w-5 h-5 rounded border-gray-300" disabled>
+                        </div>
+                        <div class="flex-1">
+                            <div class="font-bold text-sm text-slate-500">${displayName}</div>
+                            <div class="text-xs text-red-400 font-mono">Out of Stock</div>
+                        </div>
+                        <span class="text-[10px] font-bold text-red-700 bg-red-100 px-2 py-1 rounded">BUSY</span>
+                    </label>`;
+                }
+            }).join('');
         }
 
-        function showReturnVerificationModal() {
-            returnVerificationModal.classList.remove('hidden');
-        }
-
-        document.getElementById('simulate-verification-btn').addEventListener('click', () => {
-            returnVerificationModal.classList.add('hidden');
-            showReturnConfirmationModal();
-        });
-
-        document.getElementById('cancel-verification-btn').addEventListener('click', () => {
-            returnVerificationModal.classList.add('hidden');
-        });
-
-        function showReturnConfirmationModal() {
-            document.getElementById('confirm-tool-name').textContent = toolToReturnName;
-            returnConfirmationModal.classList.remove('hidden');
-        }
-
-        document.getElementById('back-to-verification-btn').addEventListener('click', () => {
-            returnConfirmationModal.classList.add('hidden');
-            showReturnVerificationModal();
-        });
-
-        document.getElementById('confirm-return-btn').addEventListener('click', async () => {
-            const reportIssue = document.getElementById('report-issue-checkbox').checked;
-            await performToolReturn(toolToReturn, reportIssue);
-            returnConfirmationModal.classList.add('hidden');
-        });
-
-        async function performToolReturn(toolId, reportIssue) {
-            const res = await fetch('/api/checkin', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ tool_id: toolId, report_issue: reportIssue })
+        async function checkoutProjectBatch() {
+            const selected = Array.from(document.querySelectorAll('.proj-cb:checked')).map(cb => cb.value);
+            if(selected.length === 0) return alert("No available tools selected.");
+            
+            await fetch(`/api/projects/${currentProjectId}/checkout`, {
+                method:'POST', headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({user_id: currentUser.id, tool_ids: selected})
             });
-            if (res.ok) {
-                alert("✅ Tool returned successfully!");
-                loadCheckedOutToolsForReturn();
-            } else {
-                const error = await res.json();
-                alert(`❌ ${error.message}`);
+            navTo('dashboard');
+        }
+
+        async function checkoutSingle(tid) {
+            if(confirm("Check out this tool?")) {
+                await fetch('/api/checkout', {
+                    method:'POST', headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({user_id: currentUser.id, tool_id: tid})
+                });
+                loadCheckout(); 
             }
         }
+
+        // --- RETURN LOGIC ---
+        async function loadReturn() {
+            switchScreen('return');
+            const tools = await (await fetch('/api/tools')).json();
+            const myTools = tools.filter(t => t.current_holder === currentUser.id && t.status === 'In Use');
+            
+            const list = document.getElementById('return-list');
+            const empty = document.getElementById('return-empty');
+            returnSelection.clear(); updateReturnFooter();
+            document.getElementById('return-select-all').checked = false;
+
+            if(myTools.length === 0) { list.classList.add('hidden'); empty.classList.remove('hidden'); return; }
+            else { list.classList.remove('hidden'); empty.classList.add('hidden'); }
+
+            list.innerHTML = myTools.map(t => `
+                <label class="relative flex items-center p-5 bg-white border-2 border-slate-200 rounded-2xl cursor-pointer hover:border-blue-400 transition shadow-sm active:scale-[0.99] select-none">
+                    <input type="checkbox" class="return-cb w-6 h-6 rounded text-blue-600 focus:ring-0 border-slate-300 mr-5" value="${t.id}">
+                    <div class="flex-1">
+                        <h4 class="font-bold text-slate-800 text-lg mb-1">${t.name}</h4>
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs font-mono bg-slate-100 px-2 py-0.5 rounded text-slate-500">${t.id}</span>
+                            <span class="text-xs text-orange-600 font-bold bg-orange-50 px-2 py-0.5 rounded">Due: ${t.calibration_due}</span>
+                        </div>
+                    </div>
+                </label>
+            `).join('');
+
+            document.querySelectorAll('.return-cb').forEach(cb => cb.addEventListener('change', (e) => {
+                e.target.checked ? returnSelection.add(e.target.value) : returnSelection.delete(e.target.value);
+                updateReturnFooter();
+            }));
+        }
+
+        document.getElementById('return-select-all').addEventListener('change', (e) => {
+            const cbs = document.querySelectorAll('.return-cb');
+            cbs.forEach(cb => { cb.checked = e.target.checked; e.target.checked ? returnSelection.add(cb.value) : returnSelection.delete(cb.value); });
+            updateReturnFooter();
+        });
+
+        function updateReturnFooter() {
+            const footer = document.getElementById('return-footer');
+            document.getElementById('return-count').innerText = returnSelection.size;
+            if(returnSelection.size > 0) footer.classList.remove('hidden'); else footer.classList.add('hidden');
+        }
+
+        function openReturnModal() { document.getElementById('modal-return-verify').classList.remove('hidden'); }
+
+        async function submitReturn() {
+            for(const id of returnSelection) { await fetch('/api/checkin', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({tool_id: id}) }); }
+            closeModal('modal-return-verify'); navTo('dashboard');
+        }
+
+        // --- REPORT LOGIC ---
+        async function openReportModal() {
+            const tools = await (await fetch('/api/tools')).json();
+            const myTools = tools.filter(t => t.current_holder === currentUser.id && t.status === 'In Use');
+            allTools = tools; 
+
+            document.getElementById('rep-my-tools').innerHTML = myTools.map(t => `
+                <div onclick="selectReportTool('${t.id}', '${t.name}')" class="p-4 bg-red-50 border border-red-100 rounded-xl flex justify-between items-center cursor-pointer hover:bg-red-100 hover:shadow-sm active:scale-95 transition">
+                    <div><div class="font-bold text-red-900">${t.name}</div><div class="text-xs font-mono text-red-400 mt-1">${t.id}</div></div><i class="fas fa-chevron-right text-red-300"></i>
+                </div>
+            `).join('') || '<div class="col-span-full text-center p-4 text-slate-400 text-sm italic border-2 border-dashed border-slate-200 rounded-xl">No tools currently checked out by you. Search below.</div>';
+
+            filterReportTools(); repStep(1); document.getElementById('modal-report').classList.remove('hidden');
+        }
+
+        function filterReportTools() {
+            const term = document.getElementById('rep-search').value.toLowerCase();
+            const results = allTools.filter(t => t.name.toLowerCase().includes(term) || t.id.toLowerCase().includes(term));
+            document.getElementById('rep-all-tools').innerHTML = results.slice(0,12).map(t => `<div onclick="selectReportTool('${t.id}', '${t.name}')" class="p-3 border border-slate-200 rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-50 hover:border-blue-300 cursor-pointer truncate transition">${t.name}</div>`).join('');
+        }
+
+        function selectReportTool(id, name) {
+            reportSelectedTool = {id, name}; document.getElementById('rep-tool-name').innerText = name; repStep(2);
+        }
+
+        function repStep(n) {
+            if(n===1) { document.getElementById('rep-step-1').classList.remove('hidden'); document.getElementById('rep-step-2').classList.add('hidden'); document.getElementById('btn-submit-rep').classList.add('hidden'); }
+            else { document.getElementById('rep-step-1').classList.add('hidden'); document.getElementById('rep-step-2').classList.remove('hidden'); document.getElementById('btn-submit-rep').classList.remove('hidden'); }
+        }
+
+        async function submitReport() {
+            const desc = document.getElementById('rep-desc').value; if(!desc) return alert("Description required");
+            await fetch('/api/issues', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ tool_id: reportSelectedTool.id, reporter_id: currentUser.id, defect_type: document.getElementById('rep-type').value, description: desc }) });
+            closeModal('modal-report'); navTo('dashboard');
+        }
+
+        function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
     </script>
 </body>
 </html>

@@ -29,12 +29,13 @@ def send_telegram_message(chat_id, text):
         print(f"⚠️ Telegram Send Error: {e}")
 
 # --- FEATURE 3A: Anti-Spam Notification Logic ---
+# telegram_manager.py (Updated Function)
+
 def check_and_notify_users():
     """Checks for tools held too long and warns users (State-Aware)."""
     conn = get_db_connection()
     try:
         # 1. USER WARNINGS (7-8 Hours)
-        # Condition: Held for >7h AND (Never alerted OR Last alert > 24h ago)
         warnings = conn.execute('''
             SELECT t.name as tool_name, u.contact_id, u.name as user_name, tr.id as tx_id
             FROM tools t
@@ -42,6 +43,8 @@ def check_and_notify_users():
             JOIN transactions tr ON t.id = tr.tool_id
             WHERE t.status = 'In Use' 
             AND tr.type = 'checkout'
+            -- BUG FIX: Only look at the LATEST checkout transaction
+            AND tr.id = (SELECT MAX(id) FROM transactions WHERE tool_id = t.id AND type = 'checkout')
             AND tr.timestamp < datetime('now', '-7 hours')
             AND tr.timestamp > datetime('now', '-8 hours')
             AND (tr.last_alert_sent IS NULL OR tr.last_alert_sent < datetime('now', '-24 hours'))
@@ -52,13 +55,11 @@ def check_and_notify_users():
                 msg = f"⚠️ **7-Hour Warning**\nHi {w['user_name']}, you have held the *{w['tool_name']}* for over 7 hours.\nPlease return it soon to avoid a Critical FOD Violation."
                 send_telegram_message(w['contact_id'], msg)
                 
-                # UPDATE DATABASE to prevent spam
                 conn.execute("UPDATE transactions SET last_alert_sent = datetime('now') WHERE id = ?", (w['tx_id'],))
                 conn.commit()
                 print(f"Sent warning to {w['user_name']}")
 
         # 2. CRITICAL ALERTS (> 8 Hours)
-        # Condition: Held for >8h AND (Never alerted OR Last alert > 4h ago)
         criticals = conn.execute('''
             SELECT t.name as tool_name, u.name as user_name, tr.id as tx_id
             FROM tools t
@@ -66,6 +67,8 @@ def check_and_notify_users():
             JOIN transactions tr ON t.id = tr.tool_id
             WHERE t.status = 'In Use' 
             AND tr.type = 'checkout'
+            -- BUG FIX: Only look at the LATEST checkout transaction
+            AND tr.id = (SELECT MAX(id) FROM transactions WHERE tool_id = t.id AND type = 'checkout')
             AND tr.timestamp < datetime('now', '-8 hours')
             AND (tr.last_alert_sent IS NULL OR tr.last_alert_sent < datetime('now', '-4 hours'))
         ''').fetchall()
@@ -74,7 +77,6 @@ def check_and_notify_users():
             msg = f"🚨 **CRITICAL FOD ALERT**\nTool: *{c['tool_name']}*\nUser: {c['user_name']}\nStatus: **> 8 Hours (Violation)**"
             send_telegram_message(SUPERVISOR_CHAT_ID, msg)
             
-            # UPDATE DATABASE to prevent spam
             conn.execute("UPDATE transactions SET last_alert_sent = datetime('now') WHERE id = ?", (c['tx_id'],))
             conn.commit()
             print(f"Sent critical alert for {c['tool_name']}")
