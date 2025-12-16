@@ -486,16 +486,37 @@
 
     <div id="ai-review-modal" class="modal-overlay">
         <div class="bg-white rounded-xl shadow-2xl w-3/4 max-w-4xl p-6 h-3/4 flex flex-col">
-            <div class="flex justify-between mb-4">
-                <h2 class="text-xl font-bold text-purple-800">AI Insight</h2>
-                <button id="close-ai-modal" class="text-2xl">&times;</button>
+            <div class="flex justify-between mb-4 border-b pb-2">
+                <div>
+                    <h2 class="text-xl font-bold text-purple-800">🤖 AI Calibration Forecast</h2>
+                    <p class="text-sm text-slate-500">The system identified high-usage tools that risk failure before their scheduled date.</p>
+                </div>
+                <button id="close-ai-modal" class="text-slate-400 hover:text-slate-600 text-2xl">&times;</button>
             </div>
+            
             <div class="flex-1 overflow-y-auto">
-                <table class="min-w-full"><tbody id="ai-proposal-body"></tbody></table>
+                <table class="min-w-full divide-y divide-slate-200">
+                    <thead class="bg-slate-50 sticky top-0">
+                        <tr>
+                            <th class="px-3 py-3 text-left">
+                                <input type="checkbox" checked disabled class="rounded text-purple-600 focus:ring-0">
+                            </th>
+                            <th class="px-3 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Tool Name</th>
+                            <th class="px-3 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Current Due Date</th>
+                            <th class="px-3 py-3 text-left text-xs font-bold text-purple-600 uppercase tracking-wider">Recommended New Date</th>
+                            <th class="px-3 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">AI Reasoning</th>
+                        </tr>
+                    </thead>
+                    <tbody id="ai-proposal-body" class="divide-y divide-slate-100 bg-white">
+                        </tbody>
+                </table>
             </div>
-            <div class="mt-4 flex justify-end gap-3">
-                <button id="cancel-ai" class="px-4 py-2 bg-gray-200 rounded">Ignore</button>
-                <button id="approve-ai" class="px-4 py-2 bg-purple-600 text-white rounded">Approve</button>
+            
+            <div class="mt-4 pt-4 border-t border-slate-100 flex justify-end gap-3">
+                <button id="cancel-ai" class="px-6 py-2 rounded-lg text-slate-600 hover:bg-slate-50 font-bold transition">Ignore Recommendations</button>
+                <button id="approve-ai" class="px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-bold shadow-md transition">
+                    Approve & Update Dates
+                </button>
             </div>
         </div>
     </div>
