@@ -416,29 +416,42 @@ def get_transactions():
 def checkout_tool():
     data = request.get_json()
     user_id = data.get('user_id')
-    tool_id = data.get('tool_id')
+    raw_id = data.get('tool_id') # This might be "DR-001" OR "0x04 0xa2..."
     
     conn = get_db_connection()
     try:
-        tool = conn.execute('SELECT * FROM tools WHERE id = ?', (tool_id,)).fetchone()
-        if not tool or tool['status'] != 'Available':
-            return jsonify({'message': 'Tool unavailable'}), 400
+        # 1. TRANSLATION LAYER: Try to find tool by ID *OR* NFC_ID
+        tool = conn.execute('''
+            SELECT * FROM tools 
+            WHERE id = ? OR nfc_id = ?
+        ''', (raw_id, raw_id)).fetchone()
 
-        # UPDATE: Added 'total_checkouts = total_checkouts + 1'
+        if not tool:
+            print(f"❌ Checkout Failed: Tool '{raw_id}' not found in DB.")
+            return jsonify({'message': 'Tool not found'}), 404
+            
+        if tool['status'] != 'Available':
+            print(f"⚠️ Checkout Denied: {tool['name']} is {tool['status']}")
+            return jsonify({'message': f"Tool is {tool['status']}"}), 400
+
+        # 2. PERFORM CHECKOUT (Using the real ID from the database)
+        real_tool_id = tool['id']
+        
         conn.execute('''
             UPDATE tools 
             SET status = "In Use", 
                 current_holder = ?, 
                 total_checkouts = total_checkouts + 1 
             WHERE id = ?
-        ''', (user_id, tool_id))
+        ''', (user_id, real_tool_id))
         
         conn.execute('INSERT INTO transactions (user_id, tool_id, type) VALUES (?, ?, "checkout")',
-                     (user_id, tool_id))
+                     (user_id, real_tool_id))
         
-        log_audit_event(user_id, 'TOOL_CHECKOUT', json.dumps({'tool_id': tool_id}), conn=conn)
+        log_audit_event(user_id, 'TOOL_CHECKOUT', json.dumps({'tool_id': real_tool_id, 'nfc_used': raw_id}), conn=conn)
         conn.commit()
-        return jsonify({'message': 'Checkout successful'})
+        print(f"✅ SUCCESS: Checked out {tool['name']} to {user_id}")
+        return jsonify({'message': 'Checkout successful', 'tool': tool['name']})
     finally:
         conn.close()
 
@@ -481,59 +494,84 @@ def checkout_project_batch(project_id):
 @app.route('/api/checkin', methods=['POST'])
 def checkin_tool():
     data = request.get_json()
-    tool_id = data.get('tool_id')
+    raw_id = data.get('tool_id')
     report_issue = data.get('report_issue', False)
     
     conn = get_db_connection()
     try:
-        tool = conn.execute('SELECT * FROM tools WHERE id = ?', (tool_id,)).fetchone()
+        # 1. TRANSLATION LAYER: Lookup by ID or NFC
+        tool = conn.execute('''
+            SELECT * FROM tools 
+            WHERE id = ? OR nfc_id = ?
+        ''', (raw_id, raw_id)).fetchone()
+
         if not tool:
+            print(f"❌ Check-in Failed: Tool '{raw_id}' not found.")
             return jsonify({'message': 'Tool not found'}), 404
 
-        new_status = 'Under Maintenance' if report_issue else 'Available'
+        real_tool_id = tool['id']
         current_holder = tool['current_holder'] or 'UNKNOWN'
+        
+        # 2. SMART STATUS LOGIC (The Critical Fix)
+        # Priority 1: If user checks 'Report Issue' -> Under Maintenance
+        # Priority 2: If tool was ALREADY broken (via Telegram) -> Keep Under Maintenance
+        # Priority 3: Otherwise -> Available
+        current_status = tool['status']
+        
+        if report_issue:
+            new_status = 'Under Maintenance'
+        elif current_status == 'Under Maintenance':
+            new_status = 'Under Maintenance' # Protect the broken status
+            print(f"⚠️ Note: {real_tool_id} returned but remains Under Maintenance.")
+        else:
+            new_status = 'Available'
 
-        # 1. CALCULATE DURATION
-        # Find the last time this tool was checked out (most recent 'checkout' record)
+        # 3. CALCULATE DURATION
+        # Find the most recent checkout for this tool to calculate usage time
         last_tx = conn.execute('''
             SELECT timestamp FROM transactions 
             WHERE tool_id = ? AND type = 'checkout' 
             ORDER BY timestamp DESC LIMIT 1
-        ''', (tool_id,)).fetchone()
+        ''', (real_tool_id,)).fetchone()
 
         duration_hours = 0.0
         if last_tx:
             try:
-                # SQLite returns strings like "2023-10-25 14:30:00"
                 start_time = datetime.strptime(last_tx['timestamp'], '%Y-%m-%d %H:%M:%S')
-                end_time = datetime.now()
-                # Calculate hours (seconds / 3600)
-                duration_hours = (end_time - start_time).total_seconds() / 3600.0
+                # Calculate difference in hours
+                duration_hours = (datetime.now() - start_time).total_seconds() / 3600.0
             except Exception as e:
-                print(f"Error calculating duration: {e}")
+                print(f"Time calc error: {e}")
 
-        # 2. UPDATE TOOL (Add duration to total_usage_hours)
+        # 4. UPDATE DB
+        # Update tool status, clear the holder, and add to the running total of usage hours
         conn.execute('''
             UPDATE tools 
             SET status = ?, 
                 current_holder = NULL, 
                 total_usage_hours = total_usage_hours + ? 
             WHERE id = ?
-        ''', (new_status, duration_hours, tool_id))
+        ''', (new_status, duration_hours, real_tool_id))
 
+        # 5. LOG TRANSACTION
+        # We record the user who HELD it as the one checking it in
         conn.execute('INSERT INTO transactions (user_id, tool_id, type) VALUES (?, ?, "checkin")',
-                     (current_holder, tool_id))
+                     (current_holder, real_tool_id))
         
-        log_audit_event(current_holder, 'TOOL_CHECKIN', json.dumps({'tool_id': tool_id, 'reported_issue': report_issue}), conn=conn)
+        # 6. AUDIT LOG
+        log_audit_event(current_holder, 'TOOL_CHECKIN', json.dumps({
+            'tool_id': real_tool_id, 
+            'hours_used': f"{duration_hours:.2f}",
+            'final_status': new_status
+        }), conn=conn)
         
-        if report_issue and telegram_manager:
-            telegram_manager.send_telegram_message(
-                telegram_manager.SUPERVISOR_CHAT_ID,
-                f"🚨 **TOOL REPORTED DAMAGED DURING RETURN**\nTool: {tool['name']} ({tool_id})\nUser: {current_holder}"
-            )
-
         conn.commit()
-        return jsonify({'message': 'Check-in successful'})
+        print(f"✅ SUCCESS: Returned {tool['name']} (Status: {new_status})")
+        return jsonify({'message': 'Check-in successful', 'status': new_status})
+        
+    except Exception as e:
+        print(f"❌ CHECKIN ERROR: {e}")
+        return jsonify({'message': str(e)}), 500
     finally:
         conn.close()
 
@@ -592,30 +630,34 @@ def report_issue():
     finally:
         conn.close()
 
-@app.route('/api/issues/<report_id>/status', methods=['PUT'])
-def update_issue_status(report_id):
+@app.route('/api/issues/<issue_id>/status', methods=['PUT']) 
+def update_issue_status(issue_id):
     data = request.get_json()
     new_status = data.get('status')
     make_available = data.get('make_tool_available', False)
     
     conn = get_db_connection()
     try:
-        updates = "status = ?"
-        params = [new_status]
+        # 1. Update the Issue Ticket Status
+        conn.execute('UPDATE issue_reports SET status = ? WHERE id = ?', (new_status, issue_id))
         
-        if new_status == 'Closed':
-            updates += ", closed_at = CURRENT_TIMESTAMP"
+        # 2. If Supervisor said "Return to Available", Fix the Tool
+        if make_available and new_status == 'Closed':
+            issue = conn.execute('SELECT tool_id FROM issue_reports WHERE id = ?', (issue_id,)).fetchone()
             
-        params.append(report_id)
-        conn.execute(f"UPDATE issue_reports SET {updates} WHERE id = ?", params)
-
-        if new_status == 'Closed' and make_available:
-            report = conn.execute("SELECT tool_id FROM issue_reports WHERE id = ?", (report_id,)).fetchone()
-            if report:
-                conn.execute("UPDATE tools SET status = 'Available' WHERE id = ?", (report['tool_id'],))
+            if issue:
+                tool_id = issue['tool_id']
+                conn.execute("UPDATE tools SET status = 'Available' WHERE id = ?", (tool_id,))
+                print(f"✅ Auto-Fix: Tool {tool_id} marked Available (Case Closed).")
+                
+                # Log it
+                log_audit_event('SUPERVISOR', 'ISSUE_RESOLVED', json.dumps({'issue_id': issue_id, 'tool_id': tool_id}), conn=conn)
 
         conn.commit()
-        return jsonify({'message': 'Status updated'})
+        return jsonify({'message': 'Status updated successfully'})
+    except Exception as e:
+        print(f"❌ ISSUE UPDATE ERROR: {e}")
+        return jsonify({'message': str(e)}), 500
     finally:
         conn.close()
 

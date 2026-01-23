@@ -2,7 +2,26 @@
 import requests
 import sqlite3
 import json
+import uuid
 from datetime import datetime
+
+def main():
+    print("🤖 Technician Assistant Bot is Running...")
+    last_update_id = None
+
+    try:  # <--- WRAP THE LOOP IN A TRY BLOCK
+        while True:
+            updates = get_updates(last_update_id)
+            # ... (rest of your code) ...
+            
+            time.sleep(1)
+
+    except KeyboardInterrupt:  # <--- CATCH CTRL+C SPECIFICALLY
+        print("\n🛑 Bot stopped by user.")
+        exit(0)
+    except Exception as e:
+        print(f"⚠️ Unexpected Error: {e}")
+
 
 # --- CONFIGURATION ---
 # Your Token
@@ -94,10 +113,14 @@ def handle_my_tools(chat_id):
         if not user:
             return "🚫 You are not registered in the system."
 
-        tools = conn.execute("SELECT * FROM tools WHERE current_holder = ?", (user['id'],)).fetchall()
+        # FIX: Added "AND status = 'In Use'" to match the UI logic
+        tools = conn.execute('''
+            SELECT * FROM tools 
+            WHERE current_holder = ? AND status = 'In Use'
+        ''', (user['id'],)).fetchall()
         
         if not tools:
-            return f"✅ Hi {user['name']}, you have no tools checked out."
+            return f"✅ Hi {user['name']}, you have no active tools."
         
         msg = f"🔧 **My Tools ({len(tools)})**\n\n"
         for t in tools:
@@ -106,6 +129,7 @@ def handle_my_tools(chat_id):
         return msg
     finally:
         conn.close()
+
 
 # --- FEATURE 3C: Remote Report Logic ---
 def handle_report(chat_id, tool_id, issue):
@@ -119,16 +143,33 @@ def handle_report(chat_id, tool_id, issue):
         if not tool:
             return "❌ Tool ID not found."
 
+        # 1. UPDATE TOOL STATUS
         conn.execute("UPDATE tools SET status = 'Under Maintenance' WHERE id = ?", (tool_id,))
         
+        # 2. GENERATE UNIQUE ID (THE FIX)
+        # We create a random 8-character string like "REP-A1B2C3D4"
+        report_id = f"REP-{str(uuid.uuid4())[:8].upper()}"
+
+        # 3. CREATE TICKET WITH ID
+        conn.execute('''
+            INSERT INTO issue_reports (id, tool_id, reporter_id, defect_type, description, status) 
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (report_id, tool_id, user['id'], 'Remote Report', issue, 'New'))
+
+        # 4. LOG AUDIT
         details = json.dumps({"reported_by": user['name'], "issue": issue, "source": "TELEGRAM"})
         conn.execute("INSERT INTO audit_log (user_id, action, details) VALUES (?, ?, ?)", 
                      (user['id'], 'REMOTE_REPORT', details))
+        
         conn.commit()
 
-        alert_msg = f"🛠 **Remote Issue Report**\nTechnician: {user['name']}\nTool: {tool['name']}\nIssue: {issue}"
+        # 5. ALERT SUPERVISOR
+        alert_msg = f"🛠 **Remote Issue Report**\nTechnician: {user['name']}\nTool: {tool['name']}\nIssue: {issue}\nID: `{report_id}`"
         send_telegram_message(SUPERVISOR_CHAT_ID, alert_msg)
 
-        return f"✅ Issue reported for {tool['name']}. Supervisor notified."
+        return f"✅ Ticket #{report_id} created for {tool['name']}."
+    except Exception as e:
+        print(f"Report Error: {e}")
+        return "❌ Internal Error processing report."
     finally:
         conn.close()

@@ -527,22 +527,51 @@
     </div>
 
     <div id="user-modal" class="modal-overlay">
-        <div class="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
-            <h2 class="text-2xl font-bold mb-6" id="user-modal-title">User</h2>
+    <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl p-6 flex flex-col">
+        <div class="flex justify-between items-center mb-6 border-b pb-2">
+            <h2 class="text-2xl font-bold text-slate-800" id="user-modal-title">Add New User</h2>
+            <button onclick="closeUserModal()" class="text-slate-400 hover:text-slate-600 text-2xl">&times;</button>
+        </div>
+
+        <div class="grid grid-cols-2 gap-8">
             <div class="space-y-4">
-                <input type="text" id="user-id" placeholder="ID" class="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none">
-                <input type="text" id="user-name" placeholder="Name" class="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none">
-                <select id="user-role" class="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none">
-                    <option value="Technician">Technician</option>
-                    <option value="Supervisor">Supervisor</option>
-                </select>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">User ID</label>
+                    <input type="text" id="user-id" placeholder="e.g. USR-005" class="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Full Name</label>
+                    <input type="text" id="user-name" placeholder="e.g. John Doe" class="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Role</label>
+                    <select id="user-role" class="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none">
+                        <option value="Technician">Technician</option>
+                        <option value="Supervisor">Supervisor</option>
+                    </select>
+                </div>
             </div>
-            <div class="flex justify-end gap-3 mt-8">
-                <button id="cancel-user" class="px-5 py-2 rounded bg-slate-100 hover:bg-slate-200 text-slate-600 text-sm font-medium">Cancel</button>
-                <button id="save-user" class="px-5 py-2 rounded bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold shadow">Save</button>
+
+            <div class="bg-slate-50 p-4 rounded-lg border-2 border-dashed border-slate-300 flex flex-col items-center justify-center">
+                <h3 class="font-bold text-slate-700 mb-2 text-sm uppercase">Bind NFC Card</h3>
+                
+                <div id="user-scan-pulse" class="w-20 h-20 bg-slate-200 rounded-full flex items-center justify-center mb-4 transition-all duration-300">
+                    <i class="fas fa-id-card text-3xl text-slate-400"></i>
+                </div>
+
+                <div id="user-scan-status" class="text-center">
+                    <p class="text-xs text-slate-500 mb-2">Tap card on reader to bind...</p>
+                    <input type="text" id="user-nfc-id" placeholder="Waiting for tap..." class="w-full text-center text-xs font-mono p-1 border rounded bg-white text-slate-500" readonly>
+                </div>
             </div>
         </div>
+
+        <div class="flex justify-end gap-3 mt-8 pt-4 border-t">
+            <button onclick="closeUserModal()" class="px-5 py-2 rounded bg-slate-100 hover:bg-slate-200 text-slate-600 text-sm font-medium">Cancel</button>
+            <button id="save-user" class="px-5 py-2 rounded bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold shadow disabled:opacity-50 disabled:cursor-not-allowed">Save User</button>
+        </div>
     </div>
+</div>
 
     <div id="ai-review-modal" class="modal-overlay">
         <div class="bg-white rounded-xl shadow-2xl w-3/4 max-w-4xl p-6 h-3/4 flex flex-col">
@@ -1131,24 +1160,112 @@
             document.getElementById('batch-modal').style.display='none'; loadInventory();
         };
 
-        // USER LOGIC
-        async function loadUsers() {
-            const users = await (await fetch('/api/users')).json();
-            document.getElementById('users-table-body').innerHTML = users.map(u => `
-                <tr class="hover:bg-slate-50 border-b last:border-0">
-                    <td class="px-6 py-4 font-mono text-sm">${u.id}</td>
-                    <td class="px-6 py-4 font-bold text-slate-700">${u.name}</td>
-                    <td class="px-6 py-4"><span class="bg-blue-50 text-blue-700 px-2 py-1 rounded text-xs font-bold uppercase border border-blue-100">${u.role}</span></td>
-                    <td class="px-6 py-4 text-right"><button class="text-red-500 del-user hover:underline text-sm font-medium" data-id="${u.id}">Remove</button></td>
-                </tr>`).join('');
-            document.querySelectorAll('.del-user').forEach(b => b.onclick = async () => { if(confirm('Delete User?')) { await fetch(`/api/users/${b.dataset.id}`, {method:'DELETE'}); loadUsers(); }});
+        // === USER MANAGEMENT LOGIC ===
+let userPollInterval = null;
+
+async function loadUsers() {
+    const users = await (await fetch('/api/users')).json();
+    document.getElementById('users-table-body').innerHTML = users.map(u => `
+        <tr class="hover:bg-slate-50 border-b last:border-0">
+            <td class="px-6 py-4 font-mono text-sm">${u.id}</td>
+            <td class="px-6 py-4 font-bold text-slate-700">${u.name}</td>
+            <td class="px-6 py-4"><span class="bg-blue-50 text-blue-700 px-2 py-1 rounded text-xs font-bold uppercase border border-blue-100">${u.role}</span></td>
+            <td class="px-6 py-4 text-right">
+                <span class="text-xs font-mono text-slate-400 mr-2">${u.nfc_id || 'No Card'}</span>
+                <button class="text-red-500 del-user hover:underline text-sm font-medium" data-id="${u.id}">Remove</button>
+            </td>
+        </tr>`).join('');
+    
+    document.querySelectorAll('.del-user').forEach(b => b.onclick = async () => { 
+        if(confirm('Delete User?')) { await fetch(`/api/users/${b.dataset.id}`, {method:'DELETE'}); loadUsers(); }
+    });
+}
+
+// Open Modal & Start Listening
+document.getElementById('add-user-btn').onclick = () => { 
+    document.getElementById('user-id').value = ''; 
+    document.getElementById('user-name').value = ''; 
+    document.getElementById('user-nfc-id').value = '';
+    
+    // Reset Visuals
+    const pulse = document.getElementById('user-scan-pulse');
+    pulse.classList.replace('bg-green-100', 'bg-slate-200');
+    pulse.innerHTML = '<i class="fas fa-id-card text-3xl text-slate-400"></i>';
+    
+    document.getElementById('user-modal').style.display = 'flex'; 
+    
+    // Start Polling for Card
+    if(userPollInterval) clearInterval(userPollInterval);
+    userPollInterval = setInterval(pollForUserCard, 1000);
+};
+
+function closeUserModal() {
+    document.getElementById('user-modal').style.display = 'none';
+    if(userPollInterval) clearInterval(userPollInterval);
+}
+
+// The Polling Function
+async function pollForUserCard() {
+    try {
+        const res = await fetch('/api/nfc/poll');
+        const data = await res.json();
+        
+        // If we found a UID
+        if (data.uid) {
+            // Update Input
+            const input = document.getElementById('user-nfc-id');
+            input.value = data.uid;
+            input.classList.add('text-green-600', 'font-bold');
+            
+            // Update Visual Pulse to GREEN CHECK
+            const pulse = document.getElementById('user-scan-pulse');
+            pulse.classList.replace('bg-slate-200', 'bg-green-100');
+            pulse.innerHTML = '<i class="fas fa-check text-4xl text-green-600"></i>';
+            
+            // Success Sound (Optional)
+            // new Audio('/static/beep.mp3').play().catch(e=>{});
+
+            // Stop Polling (We got the card)
+            clearInterval(userPollInterval);
         }
-        document.getElementById('add-user-btn').onclick = () => { document.getElementById('user-id').value=''; document.getElementById('user-modal').style.display='flex'; };
-        document.getElementById('cancel-user').onclick = () => document.getElementById('user-modal').style.display='none';
-        document.getElementById('save-user').onclick = async () => {
-            await fetch('/api/users', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:document.getElementById('user-id').value, name:document.getElementById('user-name').value, role:document.getElementById('user-role').value})});
-            document.getElementById('user-modal').style.display='none'; loadUsers();
-        };
+    } catch (e) {
+        console.error("Polling error:", e);
+    }
+}
+
+document.getElementById('save-user').onclick = async () => {
+    const uid = document.getElementById('user-id').value;
+    const name = document.getElementById('user-name').value;
+    const role = document.getElementById('user-role').value;
+    const nfc = document.getElementById('user-nfc-id').value;
+
+    if(!uid || !name) return alert("User ID and Name are required.");
+    if(!nfc) {
+        if(!confirm("⚠️ No NFC Card Scanned! This user won't be able to tap in. Continue?")) return;
+    }
+
+    try {
+        const res = await fetch('/api/users', {
+            method:'POST', 
+            headers:{'Content-Type':'application/json'}, 
+            body:JSON.stringify({
+                id: uid, 
+                name: name, 
+                role: role,
+                nfc_id: nfc // <--- Now sending the scanned ID
+            })
+        });
+        
+        const data = await res.json();
+        if(!res.ok) throw new Error(data.message);
+        
+        closeUserModal();
+        loadUsers();
+        alert("User Created Successfully!");
+    } catch(e) {
+        alert("Error: " + e.message);
+    }
+};
 
         // AUDIT TRAIL
         async function loadAuditTrail() {
@@ -1194,7 +1311,17 @@
                         <td class="px-6 py-4 text-right"><button class="text-blue-600 font-bold hover:underline text-xs manage-issue-btn" data-id="${i.id}" data-status="${i.status}" data-desc="${safeDesc}">Manage</button></td>
                     </tr>`;
             });
-            document.querySelectorAll('.manage-issue-btn').forEach(btn => btn.onclick = (e) => manageCase(e.target.dataset.id, e.target.dataset.status, e.target.dataset.desc));
+            document.querySelectorAll('.manage-issue-btn').forEach(btn => {
+    btn.onclick = (e) => {
+        // FIX: Use currentTarget to guarantee we grab the BUTTON element
+        const el = e.currentTarget; 
+        
+        // Debug check (Optional, remove after testing)
+        if (!el.dataset.id) console.error("Missing ID on button:", el);
+
+        manageCase(el.dataset.id, el.dataset.status, el.dataset.desc);
+    };
+});
         }
 
         function manageCase(id, status, desc) {

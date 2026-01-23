@@ -51,9 +51,14 @@
                 </div>
             </div>
 
-            <p class="text-slate-400 font-mono text-base mb-8 animate-pulse font-medium">Waiting for NFC Tag...</p>
+            <p id="status-text" class="text-slate-400 font-mono text-base mb-8 animate-pulse font-medium">Waiting for NFC Tag...</p>
 
-            <div class="absolute bottom-8 left-0 right-0 flex justify-center opacity-80 hover:opacity-100 transition-opacity">
+            <div class="absolute bottom-8 left-0 right-0 flex flex-col items-center gap-4 opacity-80 hover:opacity-100 transition-opacity">
+                <div class="flex items-center gap-2 text-xs font-mono text-slate-400 bg-slate-50 px-3 py-1 rounded-full border">
+                    <div id="connection-dot" class="w-2 h-2 rounded-full bg-green-500"></div>
+                    <span id="connection-text">SYSTEM ONLINE</span>
+                </div>
+
                 <div class="bg-slate-100 p-2 rounded-xl flex gap-2 border border-slate-200 shadow-sm">
                     <select id="sim-user-select" class="p-2 pr-8 border-none bg-transparent text-sm font-bold text-slate-600 focus:ring-0 cursor-pointer">
                         <option>Loading users...</option>
@@ -261,17 +266,35 @@
 
         document.addEventListener('DOMContentLoaded', () => {
             loadSimUsers();
+            // Start listening for NFC taps immediately
             setInterval(checkNfc, 1000);
         });
 
-        // --- AUTH ---
+        // --- AUTH & POLLING ---
         async function checkNfc() {
+            // If already logged in, stop checking (or check for logout card?)
             if(currentUser) return; 
+            
             try {
+                // Ask the server: "Did anyone tap?"
                 const res = await fetch('/api/nfc/poll');
                 const data = await res.json();
-                if(data.user_id) login(data.user_id);
-            } catch(e) { }
+                
+                // Server says: "Yes, User ID X tapped!"
+                if(data.user_id) {
+                    document.getElementById('status-text').innerText = "Logging in...";
+                    document.getElementById('status-text').classList.add('text-blue-600');
+                    login(data.user_id);
+                }
+
+                // Update Visual Connection Status
+                document.getElementById('connection-dot').className = "w-2 h-2 rounded-full bg-green-500";
+                document.getElementById('connection-text').innerText = "SYSTEM ONLINE";
+            } catch(e) { 
+                // Visual Error Feedback
+                document.getElementById('connection-dot').className = "w-2 h-2 rounded-full bg-red-500";
+                document.getElementById('connection-text').innerText = "DISCONNECTED";
+            }
         }
 
         async function loadSimUsers() {
@@ -283,16 +306,28 @@
         }
 
         async function login(uid) {
-            const res = await fetch(`/api/users/${uid}`);
-            if(res.ok) {
-                currentUser = await res.json();
-                document.getElementById('user-name').innerText = currentUser.name.split(' ')[0];
-                switchScreen('dashboard');
-            } else { alert("User not found"); }
+            try {
+                const res = await fetch(`/api/users/${uid}`);
+                if(res.ok) {
+                    currentUser = await res.json();
+                    document.getElementById('user-name').innerText = currentUser.name.split(' ')[0];
+                    // Play Sound (Optional)
+                    // new Audio('/static/success.mp3').play().catch(()=>{});
+                    switchScreen('dashboard');
+                } else { 
+                    alert("User not found: " + uid); 
+                    document.getElementById('status-text').innerText = "Waiting for NFC Tag...";
+                    document.getElementById('status-text').classList.remove('text-blue-600');
+                }
+            } catch(e) {
+                console.error(e);
+            }
         }
 
         function logout() {
             currentUser = null;
+            document.getElementById('status-text').innerText = "Waiting for NFC Tag...";
+            document.getElementById('status-text').classList.remove('text-blue-600');
             switchScreen('idle');
         }
 
@@ -373,7 +408,7 @@
             `).join('');
         }
 
-        // === NEW DYNAMIC PROJECT LOGIC ===
+        // --- DYNAMIC PROJECT LOGIC ---
         async function openProjectDetail(pid) {
             const p = allProjects.find(x => x.id === pid);
             currentProjectId = pid;
@@ -384,13 +419,11 @@
             document.getElementById('proj-det-name').innerText = p.name;
             document.getElementById('proj-det-brief').innerText = p.briefing;
 
-            // NEW: Fetch all tools to find availability by MODEL
             const requiredModels = JSON.parse(p.tool_list);
             const fullInv = await (await fetch('/api/tools')).json();
             
             const list = document.getElementById('proj-det-list');
             list.innerHTML = requiredModels.map(modelCode => {
-                // Find first available tool of this model
                 const availableTool = fullInv.find(t => t.model === modelCode && t.status === 'Available');
                 const anyTool = fullInv.find(t => t.model === modelCode);
                 const displayName = anyTool ? anyTool.name : "Unknown Tool";
