@@ -7,8 +7,6 @@ from datetime import datetime, timedelta
 import requests
 
 # --- TELEGRAM INTEGRATION ---
-# We wrap this in a try/except block so the app doesn't crash 
-# if you haven't set up the telegram_manager.py file yet.
 try:
     import telegram_manager
 except ImportError:
@@ -18,7 +16,6 @@ except ImportError:
 app = Flask(__name__)
 
 # --- GLOBAL STATE (NFC BRIDGE) ---
-# This acts as a temporary memory bridge between the Raspberry Pi and the Browser.
 latest_nfc_scan = {
     "user_id": None,
     "timestamp": 0
@@ -32,10 +29,6 @@ def get_db_connection():
 
 # --- AUDIT LOGGER ---
 def log_audit_event(user_id, action, details="", conn=None):
-    """
-    Logs events to the audit_log table.
-    Accepts an optional 'conn' argument to share existing database transactions.
-    """
     should_close = False
     if conn is None:
         conn = get_db_connection()
@@ -70,20 +63,17 @@ def technician_station():
 
 @app.route('/api/nfc/scan', methods=['POST'])
 def receive_nfc_scan():
-    """Receives tap data from Raspberry Pi"""
     data = request.get_json()
-    card_uid = data.get('uid') # Format example: "0xd4 0x81..."
+    card_uid = data.get('uid')
     
     if not card_uid:
         return jsonify({'error': 'No UID provided'}), 400
 
     conn = get_db_connection()
     try:
-        # Check if this card belongs to a registered user
         user = conn.execute('SELECT * FROM users WHERE nfc_id = ?', (card_uid,)).fetchone()
         
         if user:
-            # Update global memory so the browser can find it
             latest_nfc_scan['user_id'] = user['id']
             latest_nfc_scan['timestamp'] = datetime.now().timestamp()
             print(f"📡 NFC TAP ACCEPTED: {user['name']} ({card_uid})")
@@ -96,9 +86,7 @@ def receive_nfc_scan():
 
 @app.route('/api/nfc/poll', methods=['GET'])
 def poll_nfc_scan():
-    """Technician UI polls this to see if a tap occurred"""
     now = datetime.now().timestamp()
-    # Only return scans that happened in the last 5 seconds
     if latest_nfc_scan['user_id'] and (now - latest_nfc_scan['timestamp'] < 5):
         return jsonify({'user_id': latest_nfc_scan['user_id']})
     
@@ -143,7 +131,6 @@ def create_user():
 def delete_user(user_id):
     conn = get_db_connection()
     try:
-        # Prevent deleting users who currently hold tools
         active_tools = conn.execute('SELECT count(*) FROM tools WHERE current_holder = ?', (user_id,)).fetchone()[0]
         if active_tools > 0:
             return jsonify({'message': 'Cannot delete: User is currently holding tools'}), 400
@@ -250,7 +237,6 @@ def batch_update_tools():
         if not fields:
             return jsonify({'message': 'No valid fields to update'}), 400
              
-        # Dynamic SQL construction
         sql = f"UPDATE tools SET {', '.join(fields)} WHERE id IN ({','.join(['?']*len(tool_ids))})"
         values.extend(tool_ids)
         
@@ -324,10 +310,8 @@ def delete_project(project_id):
 
 @app.route('/api/transactions', methods=['GET'])
 def get_transactions():
-    """Fetches recent activity for the Supervisor Dashboard"""
     conn = get_db_connection()
     try:
-        # Get last 10 transactions with Tool Name and User Name
         query = '''
             SELECT t.timestamp, u.name as user_name, tl.name as tool_name, t.type, t.id
             FROM transactions t
@@ -341,6 +325,7 @@ def get_transactions():
     finally:
         conn.close()
 
+# --- FIXED CHECKOUT LOGIC ---
 @app.route('/api/checkout', methods=['POST'])
 def checkout_tool():
     data = request.get_json()
@@ -353,8 +338,15 @@ def checkout_tool():
         if not tool or tool['status'] != 'Available':
             return jsonify({'message': 'Tool unavailable'}), 400
 
-        conn.execute('UPDATE tools SET status = "In Use", current_holder = ? WHERE id = ?', 
-                     (user_id, tool_id))
+        # UPDATE: Added 'total_checkouts = total_checkouts + 1'
+        conn.execute('''
+            UPDATE tools 
+            SET status = "In Use", 
+                current_holder = ?, 
+                total_checkouts = total_checkouts + 1 
+            WHERE id = ?
+        ''', (user_id, tool_id))
+        
         conn.execute('INSERT INTO transactions (user_id, tool_id, type) VALUES (?, ?, "checkout")',
                      (user_id, tool_id))
         
@@ -364,6 +356,7 @@ def checkout_tool():
     finally:
         conn.close()
 
+# --- FIXED BATCH CHECKOUT ---
 @app.route('/api/projects/<project_id>/checkout', methods=['POST'])
 def checkout_project_batch(project_id):
     data = request.get_json()
@@ -377,8 +370,15 @@ def checkout_project_batch(project_id):
             tool = conn.execute('SELECT * FROM tools WHERE id = ?', (tool_id,)).fetchone()
             
             if tool and tool['status'] == 'Available':
-                conn.execute('UPDATE tools SET status = "In Use", current_holder = ? WHERE id = ?',
-                             (user_id, tool_id))
+                # UPDATE: Added 'total_checkouts = total_checkouts + 1'
+                conn.execute('''
+                    UPDATE tools 
+                    SET status = "In Use", 
+                        current_holder = ?, 
+                        total_checkouts = total_checkouts + 1 
+                    WHERE id = ?
+                ''', (user_id, tool_id))
+                
                 conn.execute('INSERT INTO transactions (user_id, tool_id, type) VALUES (?, ?, "checkout")',
                              (user_id, tool_id))
                 results['checked_out'].append(tool_id)
@@ -391,6 +391,7 @@ def checkout_project_batch(project_id):
     finally:
         conn.close()
 
+# --- FIXED CHECKIN LOGIC (USAGE HOURS) ---
 @app.route('/api/checkin', methods=['POST'])
 def checkin_tool():
     data = request.get_json()
@@ -404,17 +405,41 @@ def checkin_tool():
             return jsonify({'message': 'Tool not found'}), 404
 
         new_status = 'Under Maintenance' if report_issue else 'Available'
-        # Keep the holder for the record if reporting issue, otherwise clear it
         current_holder = tool['current_holder'] or 'UNKNOWN'
 
-        conn.execute('UPDATE tools SET status = ?, current_holder = NULL WHERE id = ?', 
-                     (new_status, tool_id))
+        # 1. CALCULATE DURATION
+        # Find the last time this tool was checked out (most recent 'checkout' record)
+        last_tx = conn.execute('''
+            SELECT timestamp FROM transactions 
+            WHERE tool_id = ? AND type = 'checkout' 
+            ORDER BY timestamp DESC LIMIT 1
+        ''', (tool_id,)).fetchone()
+
+        duration_hours = 0.0
+        if last_tx:
+            try:
+                # SQLite returns strings like "2023-10-25 14:30:00"
+                start_time = datetime.strptime(last_tx['timestamp'], '%Y-%m-%d %H:%M:%S')
+                end_time = datetime.now()
+                # Calculate hours (seconds / 3600)
+                duration_hours = (end_time - start_time).total_seconds() / 3600.0
+            except Exception as e:
+                print(f"Error calculating duration: {e}")
+
+        # 2. UPDATE TOOL (Add duration to total_usage_hours)
+        conn.execute('''
+            UPDATE tools 
+            SET status = ?, 
+                current_holder = NULL, 
+                total_usage_hours = total_usage_hours + ? 
+            WHERE id = ?
+        ''', (new_status, duration_hours, tool_id))
+
         conn.execute('INSERT INTO transactions (user_id, tool_id, type) VALUES (?, ?, "checkin")',
                      (current_holder, tool_id))
         
         log_audit_event(current_holder, 'TOOL_CHECKIN', json.dumps({'tool_id': tool_id, 'reported_issue': report_issue}), conn=conn)
         
-        # Telegram Notification for damaged tools
         if report_issue and telegram_manager:
             telegram_manager.send_telegram_message(
                 telegram_manager.SUPERVISOR_CHAT_ID,
@@ -448,7 +473,6 @@ def get_issues():
 @app.route('/api/issues', methods=['POST'])
 def report_issue():
     data = request.get_json()
-    # Generate a readable Report ID
     report_id = f"REP-{str(uuid.uuid4())[:8].upper()}"
     
     conn = get_db_connection()
@@ -457,23 +481,18 @@ def report_issue():
         if not tool:
             return jsonify({'message': 'Tool not found'}), 404
 
-        # AUTO-RETURN LOGIC: 
-        # If the reporter currently has the tool, return it first so they don't keep accumulating time.
         if tool['current_holder'] == data['reporter_id']:
             conn.execute('UPDATE tools SET current_holder = NULL WHERE id = ?', (data['tool_id'],))
             conn.execute('INSERT INTO transactions (user_id, tool_id, type) VALUES (?, ?, "checkin")',
                          (data['reporter_id'], data['tool_id']))
         
-        # Mark Tool as Broken
         conn.execute("UPDATE tools SET status = 'Under Maintenance' WHERE id = ?", (data['tool_id'],))
 
-        # Create the Issue Record
         conn.execute('''
             INSERT INTO issue_reports (id, tool_id, reporter_id, defect_type, description, status)
             VALUES (?, ?, ?, ?, ?, 'New')
         ''', (report_id, data['tool_id'], data['reporter_id'], data['defect_type'], data['description']))
 
-        # Log and Notify
         log_audit_event(data['reporter_id'], 'ISSUE_REPORTED', json.dumps({'report_id': report_id}), conn=conn)
         
         if telegram_manager:
@@ -498,14 +517,12 @@ def update_issue_status(report_id):
         updates = "status = ?"
         params = [new_status]
         
-        # Set timestamp if closing
         if new_status == 'Closed':
             updates += ", closed_at = CURRENT_TIMESTAMP"
             
         params.append(report_id)
         conn.execute(f"UPDATE issue_reports SET {updates} WHERE id = ?", params)
 
-        # Optional: If case closed, make tool available again
         if new_status == 'Closed' and make_available:
             report = conn.execute("SELECT tool_id FROM issue_reports WHERE id = ?", (report_id,)).fetchone()
             if report:
@@ -524,10 +541,8 @@ def update_issue_status(report_id):
 def get_alerts():
     conn = get_db_connection()
     try:
-        # 1. Overdue Calibration
         overdue = conn.execute("SELECT * FROM tools WHERE status != 'Under Maintenance' AND date(calibration_due) < date('now')").fetchall()
         
-        # 2. Long Checkout (> 8 Hours)
         long_checkout = conn.execute('''
             SELECT t.*, tr.timestamp 
             FROM tools t 
@@ -536,7 +551,6 @@ def get_alerts():
             AND tr.timestamp < datetime('now', '-8 hours')
         ''').fetchall()
         
-        # 3. Trigger Passive Telegram Check (Anti-Spam handled inside telegram_manager)
         if telegram_manager:
             try:
                 telegram_manager.check_and_notify_users()
@@ -550,13 +564,10 @@ def get_alerts():
     finally:
         conn.close()
 
-# In app.py
-
 @app.route('/api/live-view')
 def get_live_view():
     conn = get_db_connection()
     try:
-        # We fetch the data as usual
         tools = conn.execute('''
             SELECT 
                 t.id as tool_id, 
@@ -575,13 +586,10 @@ def get_live_view():
             )
         ''').fetchall()
 
-        # FIX: Append 'Z' to indicate UTC time so the browser converts it correctly
         results = []
         for row in tools:
             r = dict(row)
             if r['checkout_time']:
-                # Ensure the format is ISO-8601 compliant (YYYY-MM-DDTHH:MM:SSZ)
-                # We replace the space with 'T' and add 'Z' at the end
                 r['checkout_time'] = r['checkout_time'].replace(" ", "T") + "Z"
             results.append(r)
 
@@ -640,7 +648,6 @@ def emergency_unlock():
 
     return jsonify({'message': 'Unlock command sent'})
 
-# --- Calibration Events for Calendar ---
 @app.route('/api/calibration/events')
 def get_calibration_events():
     year = request.args.get('year', type=int, default=datetime.now().year)
@@ -661,7 +668,6 @@ def get_calibration_events():
     finally:
         conn.close()
 
-# --- AI Calibration Logic ---
 @app.route('/api/calibration/predict', methods=['POST'])
 def get_ai_predictions():
     try:
@@ -669,7 +675,6 @@ def get_ai_predictions():
         result = generate_forecast()
         return jsonify(result)
     except ImportError:
-        # Fallback if AI module is missing/broken
         return jsonify({'status': 'error', 'message': 'AI Module Missing'}), 500
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
@@ -695,5 +700,4 @@ def apply_ai_predictions():
         conn.close()
 
 if __name__ == '__main__':
-    # Host 0.0.0.0 makes it accessible to the Raspberry Pi on the same network
-    app.run(debug=True, host='0.0.0.0')
+    app.run(debug=True, host='0.0.0.0', port=5000)
