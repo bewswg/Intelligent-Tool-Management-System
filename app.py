@@ -69,28 +69,41 @@ def receive_nfc_scan():
     if not card_uid:
         return jsonify({'error': 'No UID provided'}), 400
 
+    # Store this scan GLOBALLY so the UI can find it
+    global latest_nfc_scan
+    latest_nfc_scan['uid'] = card_uid
+    latest_nfc_scan['timestamp'] = datetime.now().timestamp()
+    latest_nfc_scan['type'] = 'unknown' # Default
+
     conn = get_db_connection()
     try:
+        # Check if it's a User
         user = conn.execute('SELECT * FROM users WHERE nfc_id = ?', (card_uid,)).fetchone()
-        
         if user:
-            latest_nfc_scan['user_id'] = user['id']
-            latest_nfc_scan['timestamp'] = datetime.now().timestamp()
-            print(f"📡 NFC TAP ACCEPTED: {user['name']} ({card_uid})")
-            return jsonify({'message': 'Scan accepted', 'user': user['name']})
-        else:
-            print(f"⚠️ UNKNOWN CARD TAPPED: {card_uid}")
-            return jsonify({'error': 'Card not registered'}), 404
+            latest_nfc_scan['type'] = 'user'
+            latest_nfc_scan['id'] = user['id']
+            return jsonify({'message': 'User identified', 'user': user['name']})
+        
+        # Check if it's an existing Tool
+        tool = conn.execute('SELECT * FROM tools WHERE nfc_id = ?', (card_uid,)).fetchone()
+        if tool:
+            latest_nfc_scan['type'] = 'tool'
+            latest_nfc_scan['id'] = tool['id']
+            return jsonify({'message': 'Tool identified', 'tool': tool['name']})
+
+        # If neither, it's a NEW TAG (Perfect for registration)
+        print(f"🆕 NEW TAG DISCOVERED: {card_uid}")
+        return jsonify({'message': 'New tag detected', 'uid': card_uid})
     finally:
         conn.close()
 
 @app.route('/api/nfc/poll', methods=['GET'])
 def poll_nfc_scan():
     now = datetime.now().timestamp()
-    if latest_nfc_scan['user_id'] and (now - latest_nfc_scan['timestamp'] < 5):
-        return jsonify({'user_id': latest_nfc_scan['user_id']})
-    
-    return jsonify({'user_id': None})
+    # Return scan if it happened in the last 5 seconds
+    if (now - latest_nfc_scan['timestamp'] < 5):
+        return jsonify(latest_nfc_scan)
+    return jsonify({'type': None})
 
 # ==========================================
 #           USER MANAGEMENT
@@ -160,18 +173,91 @@ def get_available_tools():
     conn.close()
     return jsonify([dict(row) for row in tools])
 
+# In app.py - Replace the existing create_tool function with this:
+
 @app.route('/api/tools', methods=['POST'])
 def create_tool():
     data = request.get_json()
     conn = get_db_connection()
     try:
-        conn.execute('INSERT INTO tools (id, name, status, calibration_due) VALUES (?, ?, ?, ?)',
-                     (data['id'], data['name'], data.get('status', 'Available'), data['calibration_due']))
+        # 1. DEBUG PRINT: See what the frontend is actually sending
+        print(f"📥 RECEIVED DATA: {data}")
+
+        # 2. VALIDATION: Check for missing fields before insertion
+        required_fields = ['id', 'name', 'calibration_due']
+        for field in required_fields:
+            if field not in data or not data[field]:
+                print(f"❌ MISSING FIELD: {field}")
+                return jsonify({'message': f'Missing required field: {field}'}), 400
+
+        # 3. INSERTION (Fixed to include 'model')
+        # We default 'model' to 'Standard' if the frontend didn't send it, 
+        # just to stop the database from crashing.
+        model_value = data.get('model', 'Standard-Tool') 
+        
+        conn.execute('''
+            INSERT INTO tools (id, model, name, status, calibration_due) 
+            VALUES (?, ?, ?, ?, ?)
+        ''', (data['id'], model_value, data['name'], data.get('status', 'Available'), data['calibration_due']))
+        
+        # 4. AUDIT LOG
         log_audit_event('USR-001', 'TOOL_CREATED', json.dumps({'tool_id': data['id']}), conn=conn)
+        
         conn.commit()
+        print(f"✅ SUCCESS: Created tool {data['id']}")
         return jsonify({'message': 'Tool created'}), 201
-    except sqlite3.IntegrityError:
+
+    except sqlite3.IntegrityError as e:
+        print(f"⚠️ INTEGRITY ERROR: {e}")
         return jsonify({'message': 'Tool ID already exists'}), 400
+        
+    except Exception as e:
+        # This catches the 500 error and prints the REAL reason to your terminal
+        print(f"❌ CRITICAL SERVER ERROR: {e}")
+        import traceback
+        traceback.print_exc() # Prints the full line number of the crash
+        return jsonify({'message': str(e)}), 500
+        
+    finally:
+        conn.close()
+
+        
+@app.route('/api/tools/batch', methods=['POST'])
+def batch_create_tools():
+    data = request.get_json()
+    base_name = data.get('name')
+    model = data.get('model')
+    cal_due = data.get('calibration_due')
+    tags = data.get('nfc_tags', []) # List of UIDs
+
+    if not tags or not base_name:
+        return jsonify({'message': 'Missing data'}), 400
+
+    conn = get_db_connection()
+    try:
+        created_count = 0
+        
+        # Find the highest existing ID number to continue sequence (e.g., DR-005 -> DR-006)
+        # This is a simple heuristic; for production, use a dedicated sequence table.
+        prefix = "TL" # Default prefix
+        
+        for nfc_id in tags:
+            # Generate Unique ID (Simple Random or Sequential)
+            tool_id = f"{model[:3].upper()}-{str(uuid.uuid4())[:4].upper()}"
+            
+            conn.execute('''
+                INSERT INTO tools (id, model, name, status, calibration_due, nfc_id) 
+                VALUES (?, ?, ?, 'Available', ?, ?)
+            ''', (tool_id, model, base_name, cal_due, nfc_id))
+            created_count += 1
+
+        log_audit_event('USR-001', 'BATCH_TOOL_CREATE', json.dumps({'count': created_count, 'model': model}), conn=conn)
+        conn.commit()
+        return jsonify({'message': f'Successfully registered {created_count} tools!'})
+        
+    except Exception as e:
+        print(f"❌ BATCH ERROR: {e}")
+        return jsonify({'message': str(e)}), 500
     finally:
         conn.close()
 

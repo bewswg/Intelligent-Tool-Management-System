@@ -180,8 +180,8 @@
                     <button id="batch-edit-btn" class="hidden bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-lg shadow-sm transition font-medium">
                         <i class="fas fa-pen-to-square mr-2"></i> Batch Edit (<span id="selected-count">0</span>)
                     </button>
-                    <button id="add-tool-btn" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg shadow-sm transition font-medium">
-                        <i class="fas fa-plus mr-2"></i> Add Tool
+                    <button id="add-tool-btn" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg shadow-sm transition font-medium flex items-center">
+                        <i class="fas fa-barcode mr-2"></i> Batch Register
                     </button>
                 </div>
             </div>
@@ -344,6 +344,91 @@
         </div>
     </main>
 
+    <div id="batch-add-modal" class="modal-overlay">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col">
+            <div class="bg-slate-900 px-6 py-4 flex justify-between items-center">
+                <h2 class="text-xl font-bold text-white flex items-center gap-2">
+                    <i class="fas fa-satellite-dish"></i> Batch Tool Registration
+                </h2>
+                <button onclick="document.getElementById('batch-add-modal').style.display='none'" class="text-white hover:text-slate-300 text-2xl">&times;</button>
+            </div>
+
+            <div class="p-6 grid grid-cols-2 gap-8">
+                <div class="space-y-4">
+                    <h3 class="font-bold text-slate-700 border-b pb-2 text-sm uppercase">1. Define Tool Specs</h3>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Tool Name</label>
+                        <input type="text" id="batch-reg-name" placeholder="e.g. Pneumatic Drill" class="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Model Number</label>
+                        <input type="text" id="batch-reg-model" placeholder="e.g. M-DR-200" class="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Calibration Due</label>
+                        <input type="date" id="batch-reg-date" class="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm">
+                    </div>
+                </div>
+
+                <div class="bg-slate-50 p-4 rounded-lg border-2 border-dashed border-slate-300 flex flex-col items-center">
+                    <h3 class="font-bold text-slate-700 mb-2 text-sm uppercase">2. Scan Tags</h3>
+                    
+                    <div id="scan-pulse" class="w-16 h-16 bg-slate-200 rounded-full flex items-center justify-center mb-4 transition-all duration-300">
+                        <i class="fas fa-wifi text-2xl text-slate-400"></i>
+                    </div>
+                    
+                    <p class="text-xs text-slate-500 text-center mb-4">Tap NFC stickers one by one.</p>
+                    
+                    <div id="scanned-list" class="w-full h-32 overflow-y-auto bg-white border rounded p-2 text-xs space-y-1">
+                        <p class="text-slate-300 text-center italic mt-10">Waiting for tap...</p>
+                    </div>
+
+                    <div class="mt-2 text-right w-full">
+                        <span id="scan-count" class="font-bold text-blue-600">0</span> tags ready
+                    </div>
+                </div>
+            </div>
+
+            <div class="px-6 py-4 bg-slate-50 flex justify-end space-x-3 border-t">
+                <button onclick="document.getElementById('batch-add-modal').style.display='none'" class="px-4 py-2 text-slate-600 hover:bg-slate-200 rounded font-medium text-sm">Cancel</button>
+                <button onclick="submitBatchRegistration()" class="px-6 py-2 bg-green-600 text-white font-bold rounded hover:bg-green-700 shadow text-sm">Register All Tools</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="tool-modal" class="modal-overlay">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg p-6">
+            <h2 class="text-2xl font-bold mb-6 text-slate-800" id="tool-modal-title">Edit Tool</h2>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Tool ID (Read Only)</label>
+                    <input type="text" id="tool-id" class="w-full p-2 border rounded bg-slate-100 text-slate-500 cursor-not-allowed" disabled>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Name</label>
+                    <input type="text" id="tool-name" class="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Calibration Due</label>
+                    <input type="date" id="tool-cal-date" class="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Status</label>
+                    <select id="tool-status" class="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none">
+                        <option value="Available">Available</option>
+                        <option value="In Use">In Use</option>
+                        <option value="Overdue">Overdue</option>
+                        <option value="Under Maintenance">Under Maintenance</option>
+                    </select>
+                </div>
+            </div>
+            <div class="flex justify-end gap-3 mt-8">
+                <button id="cancel-tool" class="px-5 py-2 rounded bg-slate-100 hover:bg-slate-200 text-slate-600 font-medium text-sm">Cancel</button>
+                <button id="save-tool" class="px-5 py-2 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm shadow">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
     <div id="calibration-workbench-modal" class="modal-overlay">
         <div class="bg-white rounded-xl shadow-2xl w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden">
             <div class="p-6 border-b border-slate-200 flex justify-between items-center bg-slate-50">
@@ -356,8 +441,7 @@
                     <div class="p-4 border-b border-slate-100 bg-blue-50">
                         <h3 class="text-xs font-bold text-blue-800 uppercase tracking-wide">Tools Due on Selected Date</h3>
                     </div>
-                    <div id="cal-due-list" class="flex-1 overflow-y-auto p-2 space-y-1">
-                        </div>
+                    <div id="cal-due-list" class="flex-1 overflow-y-auto p-2 space-y-1"></div>
                 </div>
 
                 <div class="w-2/3 flex flex-col bg-slate-50">
@@ -377,8 +461,7 @@
                         
                         <div class="p-6 flex-1 overflow-y-auto">
                             <h4 class="font-bold text-slate-700 mb-2 uppercase text-xs tracking-wider border-b pb-1">Standard Operating Procedure</h4>
-                            <div id="cal-sop-content" class="prose prose-sm max-w-none text-slate-600">
-                                </div>
+                            <div id="cal-sop-content" class="prose prose-sm max-w-none text-slate-600"></div>
                         </div>
                     </div>
                     
@@ -419,8 +502,7 @@
                         <span class="text-xs font-bold text-blue-800 uppercase tracking-wide">Assigned Tools</span>
                         <span id="assigned-count" class="bg-blue-200 text-blue-800 px-2 rounded-full text-xs font-bold">0</span>
                     </div>
-                    <div id="assigned-tools-list" class="flex-1 overflow-y-auto p-2 space-y-1">
-                        </div>
+                    <div id="assigned-tools-list" class="flex-1 overflow-y-auto p-2 space-y-1"></div>
                 </div>
 
                 <div class="w-2/3 flex flex-col bg-slate-50">
@@ -433,8 +515,7 @@
                     <div class="px-4 py-2 bg-slate-100 text-xs font-bold text-slate-500 uppercase border-b border-slate-200">
                         Available Inventory (Grouped by Model)
                     </div>
-                    <div id="inventory-picker-list" class="flex-1 overflow-y-auto p-4 grid grid-cols-2 gap-3 content-start">
-                        </div>
+                    <div id="inventory-picker-list" class="flex-1 overflow-y-auto p-4 grid grid-cols-2 gap-3 content-start"></div>
                 </div>
             </div>
 
@@ -445,41 +526,20 @@
         </div>
     </div>
 
-    <div id="tool-modal" class="modal-overlay">
-        <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg p-6">
-            <h2 class="text-2xl font-bold mb-6" id="tool-modal-title">Manage Tool</h2>
-            <div class="space-y-4">
-                <input type="text" id="tool-id" placeholder="ID" class="w-full p-2 border rounded">
-                <input type="text" id="tool-name" placeholder="Name" class="w-full p-2 border rounded">
-                <input type="date" id="tool-cal-date" class="w-full p-2 border rounded">
-                <select id="tool-status" class="w-full p-2 border rounded">
-                    <option value="Available">Available</option>
-                    <option value="In Use">In Use</option>
-                    <option value="Overdue">Overdue</option>
-                    <option value="Under Maintenance">Under Maintenance</option>
-                </select>
-            </div>
-            <div class="flex justify-end gap-3 mt-8">
-                <button id="cancel-tool" class="px-5 py-2 rounded bg-gray-200">Cancel</button>
-                <button id="save-tool" class="px-5 py-2 rounded bg-blue-600 text-white">Save</button>
-            </div>
-        </div>
-    </div>
-
     <div id="user-modal" class="modal-overlay">
         <div class="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
             <h2 class="text-2xl font-bold mb-6" id="user-modal-title">User</h2>
             <div class="space-y-4">
-                <input type="text" id="user-id" placeholder="ID" class="w-full p-2 border rounded">
-                <input type="text" id="user-name" placeholder="Name" class="w-full p-2 border rounded">
-                <select id="user-role" class="w-full p-2 border rounded">
+                <input type="text" id="user-id" placeholder="ID" class="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none">
+                <input type="text" id="user-name" placeholder="Name" class="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none">
+                <select id="user-role" class="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none">
                     <option value="Technician">Technician</option>
                     <option value="Supervisor">Supervisor</option>
                 </select>
             </div>
             <div class="flex justify-end gap-3 mt-8">
-                <button id="cancel-user" class="px-5 py-2 rounded bg-gray-200">Cancel</button>
-                <button id="save-user" class="px-5 py-2 rounded bg-blue-600 text-white">Save</button>
+                <button id="cancel-user" class="px-5 py-2 rounded bg-slate-100 hover:bg-slate-200 text-slate-600 text-sm font-medium">Cancel</button>
+                <button id="save-user" class="px-5 py-2 rounded bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold shadow">Save</button>
             </div>
         </div>
     </div>
@@ -495,7 +555,11 @@
             </div>
             
             <div class="flex-1 overflow-y-auto">
-                <table class="min-w-full divide-y divide-slate-200">
+                <div id="ai-loading-spinner" class="hidden h-full flex flex-col items-center justify-center text-purple-500">
+                    <i class="fas fa-circle-notch fa-spin text-4xl mb-3"></i>
+                    <p class="text-sm font-bold animate-pulse">Running Random Forest Model...</p>
+                </div>
+                <table class="min-w-full divide-y divide-slate-200" id="ai-table">
                     <thead class="bg-slate-50 sticky top-0">
                         <tr>
                             <th class="px-3 py-3 text-left">
@@ -507,8 +571,7 @@
                             <th class="px-3 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">AI Reasoning</th>
                         </tr>
                     </thead>
-                    <tbody id="ai-proposal-body" class="divide-y divide-slate-100 bg-white">
-                        </tbody>
+                    <tbody id="ai-proposal-body" class="divide-y divide-slate-100 bg-white"></tbody>
                 </table>
             </div>
             
@@ -540,24 +603,14 @@
     <div id="emergency-modal" class="modal-overlay">
         <div class="bg-white rounded-xl shadow-2xl w-1/3 p-6 border-l-8 border-red-600">
             <h2 class="text-xl font-bold text-red-700 mb-4">Emergency Unlock</h2>
-            <textarea id="unlock-reason" class="w-full p-2 border rounded h-24 mb-4" placeholder="Reason..."></textarea>
+            <textarea id="unlock-reason" class="w-full p-2 border rounded h-24 mb-4 focus:ring-2 focus:ring-red-500 outline-none" placeholder="Reason..."></textarea>
             <div class="flex justify-end gap-2">
                 <button id="cancel-emergency" class="px-4 py-2 bg-gray-200 rounded">Cancel</button>
-                <button id="confirm-emergency" class="px-4 py-2 bg-red-600 text-white rounded">CONFIRM</button>
+                <button id="confirm-emergency" class="px-4 py-2 bg-red-600 text-white rounded shadow-lg font-bold">CONFIRM</button>
             </div>
         </div>
     </div>
 
-    <div id="tools-due-modal" class="modal-overlay">
-        <div class="bg-white rounded-xl w-1/3 p-0 overflow-hidden">
-            <div class="p-4 border-b flex justify-between">
-                <h3 class="font-bold">Due Date Info</h3>
-                <button id="close-tools-modal">&times;</button>
-            </div>
-            <ul id="tools-due-list" class="p-4 max-h-60 overflow-y-auto"></ul>
-        </div>
-    </div>
-    
     <div id="issue-modal" class="modal-overlay">
         <div class="bg-white rounded-xl w-1/3 p-6 shadow-2xl">
             <div class="flex justify-between mb-4 border-b pb-2">
@@ -567,7 +620,7 @@
             <p class="text-sm text-gray-500 mb-1">Issue Description:</p>
             <div id="modal-desc" class="bg-gray-50 p-3 rounded mb-4 text-sm font-medium border"></div>
             <label class="block font-bold text-sm mb-1">Update Status:</label>
-            <select id="modal-status" class="w-full p-2 border rounded mb-4" onchange="toggleIssueCheck()">
+            <select id="modal-status" class="w-full p-2 border rounded mb-4 focus:ring-2 focus:ring-blue-500 outline-none" onchange="toggleIssueCheck()">
                 <option value="New">New</option>
                 <option value="Working on it">Working on it</option>
                 <option value="On Hold">On Hold (Waiting for parts)</option>
@@ -581,7 +634,7 @@
             </div>
             <div class="flex justify-end gap-2">
                 <button onclick="document.getElementById('issue-modal').style.display='none'" class="px-4 py-2 bg-gray-200 rounded">Cancel</button>
-                <button onclick="saveCaseStatus()" class="px-4 py-2 bg-blue-600 text-white rounded font-bold">Update</button>
+                <button onclick="saveCaseStatus()" class="px-4 py-2 bg-blue-600 text-white rounded font-bold shadow">Update</button>
             </div>
         </div>
     </div>
@@ -595,30 +648,26 @@
         let currentFilter = 'all';
         let currentSort = { column: 'id', direction: 'asc' };
         
-        // Calendar State (Defaults to Today)
         let currentYear = new Date().getFullYear();
-        let currentMonth = new Date().getMonth() + 1; // 1-12
+        let currentMonth = new Date().getMonth() + 1; 
 
-        let selectedToolIds = new Set();
         let auditInterval = null;
         let currentProposals = [];
         let currentIssueId = null;
         let assignedModels = new Set(); 
         
-        // Calibration SOP Data
+        // Calibration SOP Data (Static for Demo)
         const calibrationSOPs = {
             'M-TW-DIG': `<h3 class="font-bold text-lg mb-2">ISO 6789-2:2017</h3><ol class="list-decimal pl-5 space-y-2"><li>Pre-Load 3x max torque.</li><li>Mount horizontally.</li><li>Test at 20%, 60%, 100%.</li><li>Take 5 readings each.</li></ol>`,
-            'M-MULTI': `<h3 class="font-bold text-lg mb-2">IEC 61010</h3><ol class="list-decimal pl-5 space-y-2"><li>Check leads.</li><li>Inject 1V, 10V, 100V.</li><li>Test Resistance 1kΩ.</li></ol>`,
             'default': `<p class="italic text-slate-500">Follow General Tooling Inspection (GTI-001).</p>`
         };
 
         // === INITIALIZATION ===
         document.addEventListener('DOMContentLoaded', () => {
-            // 1. Start Background Tasks
             loadDashboard();
             setInterval(loadDashboard, 2000); 
             
-            // 2. Setup Inventory Filters
+            // Setup Filters
             document.querySelectorAll('.filter-btn').forEach(btn => {
                 btn.addEventListener('click', (e) => {
                     document.querySelectorAll('.filter-btn').forEach(b => { 
@@ -632,59 +681,31 @@
                 });
             });
 
-            // 3. Setup Sort Headers
+            // Setup Sort Headers
             document.querySelectorAll('.sort-header').forEach(header => {
                 header.addEventListener('click', (e) => {
                     const column = e.currentTarget.dataset.column;
-                    if (currentSort.column === column) { 
-                        currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc'; 
-                    } else { 
-                        currentSort.column = column; 
-                        currentSort.direction = 'asc'; 
-                    }
+                    if (currentSort.column === column) { currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc'; } 
+                    else { currentSort.column = column; currentSort.direction = 'asc'; }
                     loadInventory();
                 });
             });
 
-            // 4. Setup Search Bars
+            // Setup Search
             const searchInput = document.getElementById('tool-search');
-            if(searchInput) {
-                searchInput.addEventListener('input', (e) => { renderInventoryPicker(e.target.value); });
-            }
+            if(searchInput) searchInput.addEventListener('input', (e) => { renderInventoryPicker(e.target.value); });
 
-            // 5. --- FIX: SETUP CALENDAR BUTTONS ---
+            // Setup Calendar
             const prevBtn = document.getElementById('prev-month');
             const nextBtn = document.getElementById('next-month');
             const jumpBtn = document.getElementById('jump-today-btn');
+            if(prevBtn) prevBtn.onclick = () => { if(currentMonth === 1) { currentMonth=12; currentYear--; } else { currentMonth--; } loadCalendar(); };
+            if(nextBtn) nextBtn.onclick = () => { if(currentMonth === 12) { currentMonth=1; currentYear++; } else { currentMonth++; } loadCalendar(); };
+            if(jumpBtn) jumpBtn.onclick = () => { const now = new Date(); currentMonth = now.getMonth() + 1; currentYear = now.getFullYear(); loadCalendar(); };
 
-            if(prevBtn) {
-                prevBtn.onclick = () => {
-                    if(currentMonth === 1) { currentMonth = 12; currentYear--; } 
-                    else { currentMonth--; }
-                    loadCalendar();
-                };
-            }
-            if(nextBtn) {
-                nextBtn.onclick = () => {
-                    if(currentMonth === 12) { currentMonth = 1; currentYear++; } 
-                    else { currentMonth++; }
-                    loadCalendar();
-                };
-            }
-            if(jumpBtn) {
-                jumpBtn.onclick = () => {
-                    const now = new Date();
-                    currentMonth = now.getMonth() + 1;
-                    currentYear = now.getFullYear();
-                    loadCalendar();
-                };
-            }
-
-            // 6. FIX: Setup "Add Project" Button (Restored)
+            // Setup Project Button
             const addProjBtn = document.getElementById('add-project-btn');
-            if(addProjBtn) {
-                addProjBtn.onclick = () => openProjectModal();
-            }
+            if(addProjBtn) addProjBtn.onclick = () => openProjectModal();
         });
 
         // === NAVIGATION ===
@@ -693,7 +714,6 @@
                 e.preventDefault();
                 const page = e.currentTarget.dataset.page;
                 
-                // Update Sidebar
                 document.querySelectorAll('.active-page').forEach(el => { 
                     el.classList.remove('active-page', 'border-blue-500', 'bg-slate-800'); 
                     el.classList.add('border-transparent'); 
@@ -701,7 +721,6 @@
                 e.currentTarget.classList.add('active-page', 'border-blue-500', 'bg-slate-800'); 
                 e.currentTarget.classList.remove('border-transparent');
                 
-                // Show Content
                 document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
                 document.getElementById(`${page}-page`).classList.add('active');
                 
@@ -709,7 +728,6 @@
                 
                 currentPage = page;
                 if (page === 'live-view') loadLiveView();
-                // IMPORTANT: Ensure tools are loaded before drawing the calendar
                 if (page === 'calibration') { loadInventory().then(loadCalendar); }
                 if (page === 'inventory') loadInventory();
                 if (page === 'users') loadUsers();
@@ -719,12 +737,97 @@
             });
         });
 
-        // === CALENDAR LOGIC (ROBUST) ===
-        async function loadCalendar() {
-            // Helper for Month Names
-            const mNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+        // === BATCH SCAN LOGIC (NEW) ===
+        let scannedTags = new Set();
+        let pollInterval = null;
+
+        // Open Batch Modal & Start Polling
+        document.getElementById('add-tool-btn').onclick = () => {
+            document.getElementById('batch-add-modal').style.display = 'flex';
+            scannedTags.clear();
+            document.getElementById('scanned-list').innerHTML = '<p class="text-slate-300 text-center italic mt-10">Waiting for tap...</p>';
+            document.getElementById('scan-count').innerText = "0";
             
-            // Update Header
+            // Start Polling
+            pollInterval = setInterval(pollForTags, 1000);
+        };
+
+        // Stop Polling on Close
+        document.querySelector('#batch-add-modal button[onclick*="none"]').addEventListener('click', () => {
+            if(pollInterval) clearInterval(pollInterval);
+        });
+
+        async function pollForTags() {
+            try {
+                const res = await fetch('/api/nfc/poll');
+                const data = await res.json();
+                // If UID exists and we haven't scanned it yet in this session
+                if (data.uid && !scannedTags.has(data.uid)) {
+                    addTagToQueue(data.uid);
+                }
+            } catch (e) {
+                console.error("Polling error (is server running?)", e);
+            }
+        }
+
+        function addTagToQueue(uid) {
+            scannedTags.add(uid);
+            const list = document.getElementById('scanned-list');
+            if(scannedTags.size === 1) list.innerHTML = ''; 
+
+            const item = document.createElement('div');
+            item.className = "flex justify-between items-center bg-blue-50 px-3 py-2 rounded border border-blue-100 animate-pulse";
+            item.innerHTML = `
+                <span class="font-mono text-sm font-bold text-blue-800">${uid}</span>
+                <span class="text-green-600 text-xs font-bold uppercase"><i class="fas fa-check mr-1"></i> Scanned</span>
+            `;
+            list.appendChild(item);
+            list.scrollTop = list.scrollHeight;
+            document.getElementById('scan-count').innerText = scannedTags.size;
+            
+            // Remove animation after a sec
+            setTimeout(() => item.classList.remove('animate-pulse'), 1000);
+            
+            // Visual Pulse on Icon
+            const icon = document.getElementById('scan-pulse');
+            icon.classList.replace('bg-slate-200', 'bg-green-300');
+            setTimeout(() => icon.classList.replace('bg-green-300', 'bg-slate-200'), 500);
+        }
+
+        async function submitBatchRegistration() {
+            const name = document.getElementById('batch-reg-name').value;
+            const model = document.getElementById('batch-reg-model').value;
+            const date = document.getElementById('batch-reg-date').value;
+            
+            if(!name || !model || !date) return alert("Please fill in Name, Model, and Date.");
+            if(scannedTags.size === 0) return alert("Please scan at least one tag.");
+
+            try {
+                const res = await fetch('/api/tools/batch', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        name: name,
+                        model: model,
+                        calibration_due: date,
+                        nfc_tags: Array.from(scannedTags)
+                    })
+                });
+                const data = await res.json();
+                if(!res.ok) throw new Error(data.message);
+                
+                alert(`✅ Success: ${data.message}`);
+                document.getElementById('batch-add-modal').style.display='none';
+                if(pollInterval) clearInterval(pollInterval);
+                loadInventory();
+            } catch (e) {
+                alert(`❌ Error: ${e.message}`);
+            }
+        }
+
+        // === CALENDAR LOGIC ===
+        async function loadCalendar() {
+            const mNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
             const header = document.getElementById('calendar-month');
             if(header) header.innerText = `${mNames[currentMonth-1]} ${currentYear}`;
             
@@ -732,30 +835,20 @@
             if(!grid) return;
             grid.innerHTML = '';
 
-            // Calculate Grid
             const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
-            const startDay = new Date(currentYear, currentMonth-1, 1).getDay(); // 0=Sun, 1=Mon...
+            const startDay = new Date(currentYear, currentMonth-1, 1).getDay();
             
-            // Draw Empty Slots
-            for(let i=0; i<startDay; i++) {
-                grid.innerHTML += '<div class="bg-slate-50 min-h-[110px]"></div>';
-            }
+            for(let i=0; i<startDay; i++) { grid.innerHTML += '<div class="bg-slate-50 min-h-[110px]"></div>'; }
             
-            // Draw Days
             for(let d=1; d<=daysInMonth; d++) {
                 const dateStr = `${currentYear}-${String(currentMonth).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-                
-                // Find tools due on this date
                 const due = allTools.filter(t => t.calibration_due === dateStr);
                 
-                // Create "Pills" for up to 3 tools
                 let pills = due.slice(0,3).map(t => 
                     `<div class="cal-pill bg-blue-100 text-blue-700 font-mono text-[10px] truncate px-1 rounded mb-1 border border-blue-200">${t.id}</div>`
                 ).join('');
-                
                 if(due.length > 3) pills += `<div class="text-[10px] text-slate-400 pl-1 font-bold">+${due.length-3} more</div>`;
                 
-                // Draw Cell
                 grid.innerHTML += `
                     <div class="cal-day bg-white p-2 border border-slate-100 hover:bg-blue-50 cursor-pointer transition-colors relative" 
                          onclick="showDay('${dateStr}')">
@@ -764,16 +857,14 @@
                     </div>`;
             }
         }
-
+        
         window.showDay = (date) => {
             const due = allTools.filter(t => t.calibration_due === date);
             const list = document.getElementById('cal-due-list');
             list.innerHTML = '';
             
-            if (due.length === 0) {
-                list.innerHTML = '<div class="text-center p-8 text-slate-400 italic">No tasks scheduled for this day.</div>';
-            } else {
-                due.forEach(t => {
+            if (due.length === 0) list.innerHTML = '<div class="text-center p-8 text-slate-400 italic">No tasks scheduled for this day.</div>';
+            else due.forEach(t => {
                     const statusClass = t.status === 'Overdue' ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700';
                     list.innerHTML += `
                         <div onclick="selectCalibrationTool('${t.id}')" class="p-4 border rounded-xl hover:bg-slate-50 cursor-pointer transition-all mb-3 bg-white shadow-sm group">
@@ -783,10 +874,7 @@
                             </div>
                             <div class="text-xs font-mono text-slate-400">${t.id}</div>
                         </div>`;
-                });
-            }
-            
-            // Reset right panel
+            });
             document.getElementById('cal-instruction-panel').classList.add('hidden');
             document.getElementById('cal-empty-state').classList.remove('hidden');
             document.getElementById('calibration-workbench-modal').style.display='flex';
@@ -803,29 +891,15 @@
             document.getElementById('cal-tool-name').innerText = tool.name;
             document.getElementById('cal-tool-id').innerText = `ID: ${tool.id} | Model: ${tool.model}`;
             
-            // Dynamic SOP Content
             const sop = calibrationSOPs[tool.model] || calibrationSOPs['default'];
             document.getElementById('cal-sop-content').innerHTML = sop;
 
-            // Bind Mark Button
             document.getElementById('btn-mark-calibrated').onclick = async () => {
                 if(!confirm(`Confirm ${tool.id} calibration complete?`)) return;
-                
-                // +90 Days
-                const nextDate = new Date();
-                nextDate.setDate(nextDate.getDate() + 90);
+                const nextDate = new Date(); nextDate.setDate(nextDate.getDate() + 90);
                 const dateStr = nextDate.toISOString().split('T')[0];
-
-                await fetch(`/api/tools/${tool.id}`, {
-                    method: 'PUT', headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ name: tool.name, calibration_due: dateStr })
-                });
-                
-                await fetch(`/api/tools/${tool.id}/status`, {
-                    method: 'PUT', headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({status: 'Available'})
-                });
-
+                await fetch(`/api/tools/${tool.id}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name:tool.name, calibration_due:dateStr})});
+                await fetch(`/api/tools/${tool.id}/status`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status:'Available'})});
                 document.getElementById('calibration-workbench-modal').style.display='none';
                 loadInventory().then(loadCalendar); 
             };
@@ -859,9 +933,7 @@
                         </div>
                         <span class="text-gray-400 text-xs font-mono">${new Date(t.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
                     </div>`).join('');
-            } catch(e) { 
-                document.getElementById('activity-log').innerHTML = '<div class="text-xs text-slate-400 italic text-center py-4">No recent activity</div>'; 
-            }
+            } catch(e) {}
         }
 
         // ================= LIVE VIEW =================
@@ -872,49 +944,28 @@
                 const tb = document.getElementById('live-view-table-body');
                 const emptyMsg = document.getElementById('no-live-tools');
                 const tableContainer = tb.closest('div');
-
                 tb.innerHTML = '';
-                if (tools.length === 0) {
-                    tableContainer.querySelector('table').classList.add('hidden');
-                    emptyMsg.classList.remove('hidden');
-                    return;
-                }
-                tableContainer.querySelector('table').classList.remove('hidden');
-                emptyMsg.classList.add('hidden');
+                if (tools.length === 0) { tableContainer.querySelector('table').classList.add('hidden'); emptyMsg.classList.remove('hidden'); return; }
+                tableContainer.querySelector('table').classList.remove('hidden'); emptyMsg.classList.add('hidden');
 
                 tools.forEach(t => {
-                    const checkoutTime = new Date(t.checkout_time);
-                    const now = new Date();
-                    const diffMs = now - checkoutTime;
+                    const diffMs = new Date() - new Date(t.checkout_time);
                     const diffHrs = Math.floor(diffMs / 3600000);
                     const diffMins = Math.floor((diffMs % 3600000) / 60000);
-                    
-                    let timeClass = "text-slate-600 font-mono font-bold";
-                    if(diffHrs >= 8) timeClass = "text-red-600 font-mono font-bold animate-pulse";
-                    else if(diffHrs >= 7) timeClass = "text-orange-600 font-mono font-bold";
+                    let timeClass = diffHrs >= 8 ? "text-red-600 font-bold animate-pulse" : "text-slate-600 font-bold";
 
                     tb.innerHTML += `
                         <tr class="hover:bg-slate-50 border-b last:border-0 transition-colors">
-                            <td class="px-6 py-4">
-                                <div class="font-bold text-slate-800">${t.tool_name}</div>
-                                <div class="text-xs font-mono text-slate-400">${t.tool_id}</div>
-                            </td>
-                            <td class="px-6 py-4">
-                                <div class="flex items-center gap-3">
-                                    <div class="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold uppercase shadow-sm border border-blue-200">
-                                        ${t.user_name ? t.user_name.charAt(0) : '?'}
-                                    </div>
-                                    <span class="text-sm font-medium text-slate-700">${t.user_name || 'Unknown'}</span>
-                                </div>
-                            </td>
+                            <td class="px-6 py-4"><div class="font-bold text-slate-800">${t.tool_name}</div><div class="text-xs font-mono text-slate-400">${t.tool_id}</div></td>
+                            <td class="px-6 py-4"><div class="flex items-center gap-3"><div class="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold uppercase shadow-sm border border-blue-200">${t.user_name ? t.user_name.charAt(0) : '?'}</div><span class="text-sm font-medium text-slate-700">${t.user_name || 'Unknown'}</span></div></td>
                             <td class="px-6 py-4"><span class="px-3 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-700 border border-blue-200">In Use</span></td>
-                            <td class="px-6 py-4 ${timeClass}">${diffHrs}h ${diffMins}m</td>
+                            <td class="px-6 py-4 font-mono ${timeClass}">${diffHrs}h ${diffMins}m</td>
                         </tr>`;
                 });
             } catch(e) {}
         }
 
-        // ================= PROJECT MANAGEMENT (SPLIT VIEW) =================
+        // ================= PROJECT MANAGEMENT =================
         async function loadProjects() {
             const res = await fetch('/api/projects');
             allProjects = await res.json();
@@ -948,17 +999,13 @@
             if (projectId) {
                 const p = allProjects.find(x => x.id === projectId);
                 document.getElementById('project-modal-title').innerText = 'Edit Project';
-                document.getElementById('project-id').value = p.id;
-                document.getElementById('project-id').disabled = true; 
-                document.getElementById('project-name').value = p.name;
-                document.getElementById('project-briefing').value = p.briefing;
+                document.getElementById('project-id').value = p.id; document.getElementById('project-id').disabled = true; 
+                document.getElementById('project-name').value = p.name; document.getElementById('project-briefing').value = p.briefing;
                 JSON.parse(p.tool_list || '[]').forEach(m => assignedModels.add(m));
             } else {
                 document.getElementById('project-modal-title').innerText = 'New Project';
-                document.getElementById('project-id').value = '';
-                document.getElementById('project-id').disabled = false;
-                document.getElementById('project-name').value = '';
-                document.getElementById('project-briefing').value = '';
+                document.getElementById('project-id').value = ''; document.getElementById('project-id').disabled = false;
+                document.getElementById('project-name').value = ''; document.getElementById('project-briefing').value = '';
             }
             renderAssignedList();
             renderInventoryPicker();
@@ -970,7 +1017,6 @@
             document.getElementById('assigned-count').innerText = assignedModels.size;
             list.innerHTML = '';
             if(assignedModels.size === 0) { list.innerHTML = '<div class="text-center p-4 text-slate-400 text-xs italic">No tools assigned yet.</div>'; return; }
-
             assignedModels.forEach(modelCode => {
                 const sample = allTools.find(t => t.model === modelCode);
                 const name = sample ? sample.name : modelCode;
@@ -983,13 +1029,10 @@
         }
 
         function renderInventoryPicker(filter = "") {
-            const list = document.getElementById('inventory-picker-list');
-            list.innerHTML = '';
-            const uniqueModels = new Map();
-            allTools.forEach(t => { if(!uniqueModels.has(t.model)) uniqueModels.set(t.model, t.name); });
-
+            const list = document.getElementById('inventory-picker-list'); list.innerHTML = '';
+            const uniqueModels = new Map(); allTools.forEach(t => { if(!uniqueModels.has(t.model)) uniqueModels.set(t.model, t.name); });
             uniqueModels.forEach((name, modelCode) => {
-                if(filter && !name.toLowerCase().includes(filter.toLowerCase()) && !modelCode.toLowerCase().includes(filter.toLowerCase())) return;
+                if(filter && !name.toLowerCase().includes(filter.toLowerCase())) return;
                 const isAdded = assignedModels.has(modelCode);
                 const btnClass = isAdded ? "bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed" : "bg-white border-slate-200 hover:border-blue-400 hover:shadow-sm cursor-pointer";
                 list.innerHTML += `
@@ -1016,31 +1059,21 @@
             document.getElementById('project-modal').style.display = 'none';
             loadProjects(); 
         };
-
         async function deleteProject(id) { if(confirm('Delete project?')) { await fetch(`/api/projects/${id}`, {method: 'DELETE'}); loadProjects(); } }
 
         // ================= INVENTORY LOGIC =================
         async function loadInventory() {
-            const res = await fetch('/api/tools'); 
-            allTools = await res.json();
-            const tb = document.getElementById('inventory-table-body'); 
-            tb.innerHTML = '';
-            
+            const res = await fetch('/api/tools'); allTools = await res.json();
+            const tb = document.getElementById('inventory-table-body'); tb.innerHTML = '';
             let filtered = currentFilter === 'all' ? allTools : allTools.filter(t => t.status === currentFilter);
             filtered.sort((a,b) => {
                 let valA = a[currentSort.column] || ''; let valB = b[currentSort.column] || '';
                 if (valA < valB) return currentSort.direction === 'asc' ? -1 : 1;
-                if (valA > valB) return currentSort.direction === 'asc' ? 1 : -1;
-                return 0;
+                if (valA > valB) return currentSort.direction === 'asc' ? 1 : -1; return 0;
             });
 
             filtered.forEach(t => {
-                let statusClass = '';
-                if (t.status === 'Available') statusClass = 'bg-green-100 text-green-700';
-                else if (t.status === 'In Use') statusClass = 'bg-blue-100 text-blue-700';
-                else if (t.status === 'Overdue') statusClass = 'bg-red-100 text-red-700';
-                else if (t.status === 'Under Maintenance') statusClass = 'bg-orange-100 text-orange-700';
-
+                let statusClass = t.status === 'Available' ? 'bg-green-100 text-green-700' : t.status === 'In Use' ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700';
                 tb.innerHTML += `
                     <tr class="hover:bg-slate-50 border-b">
                         <td class="px-6 py-4 text-center"><input type="checkbox" class="tool-checkbox" value="${t.id}"></td>
@@ -1057,7 +1090,6 @@
                     </tr>`;
             });
 
-            // Re-attach listeners
             document.querySelectorAll('.edit-tool').forEach(b => b.onclick = () => openToolModal(b.dataset.id));
             document.querySelectorAll('.delete-tool').forEach(b => b.onclick = async () => { if(confirm('Delete?')) { await fetch(`/api/tools/${b.dataset.id}`, {method:'DELETE'}); loadInventory(); }});
             document.querySelectorAll('.tool-checkbox').forEach(cb => cb.onchange = updateBatchUI);
@@ -1077,7 +1109,6 @@
             document.getElementById('tool-status').value = t.status;
             document.getElementById('tool-modal').style.display='flex';
         }
-        document.getElementById('add-tool-btn').onclick = () => { document.getElementById('tool-id').disabled=false; document.getElementById('tool-id').value=''; document.getElementById('tool-modal').style.display='flex'; };
         document.getElementById('cancel-tool').onclick = () => document.getElementById('tool-modal').style.display='none';
         document.getElementById('save-tool').onclick = async () => {
             const body = { id: document.getElementById('tool-id').value, name: document.getElementById('tool-name').value, calibration_due: document.getElementById('tool-cal-date').value, status: document.getElementById('tool-status').value };
@@ -1088,6 +1119,7 @@
             document.getElementById('tool-modal').style.display='none'; loadInventory();
         };
 
+        // BATCH STATUS EDIT
         document.getElementById('batch-edit-btn').onclick = () => document.getElementById('batch-modal').style.display='flex';
         document.getElementById('cancel-batch').onclick = () => document.getElementById('batch-modal').style.display='none';
         document.getElementById('save-batch').onclick = async () => {
@@ -1125,13 +1157,7 @@
             const logs = await (await fetch(`/api/audit-trail?search=${encodeURIComponent(s)}&action=${encodeURIComponent(a)}`)).json();
             document.getElementById('audit-table-body').innerHTML = logs.map(l => {
                 let det = l.details; try { det = JSON.stringify(JSON.parse(l.details)); } catch(e){}
-                return `
-                    <tr class="hover:bg-slate-50 border-b last:border-0">
-                        <td class="px-6 py-3 text-xs font-mono text-slate-500">${l.timestamp}</td>
-                        <td class="px-6 py-3 text-sm font-bold text-slate-700">${l.user_name||'System'}</td>
-                        <td class="px-6 py-3"><span class="bg-slate-100 px-2 py-1 rounded text-xs font-bold uppercase border border-slate-200">${l.action}</span></td>
-                        <td class="px-6 py-3 text-xs text-slate-500 truncate max-w-xs">${det}</td>
-                    </tr>`;
+                return `<tr class="hover:bg-slate-50 border-b last:border-0"><td class="px-6 py-3 text-xs font-mono text-slate-500">${l.timestamp}</td><td class="px-6 py-3 text-sm font-bold text-slate-700">${l.user_name||'System'}</td><td class="px-6 py-3"><span class="bg-slate-100 px-2 py-1 rounded text-xs font-bold uppercase border border-slate-200">${l.action}</span></td><td class="px-6 py-3 text-xs text-slate-500 truncate max-w-xs">${det}</td></tr>`;
             }).join('');
         }
         document.getElementById('audit-apply-filters').onclick = loadAuditTrail;
@@ -1144,7 +1170,7 @@
             document.getElementById('emergency-modal').style.display='none';
         };
 
-        // ISSUES LOGIC (ROBUST DATA ATTRIBUTES)
+        // ISSUES LOGIC
         async function loadIssues() {
             const res = await fetch('/api/issues');
             const issues = await res.json();
@@ -1155,13 +1181,7 @@
             issues.forEach(i => {
                 if (filter === 'open' && i.status === 'Closed') return;
                 if (filter === 'closed' && i.status !== 'Closed') return;
-                
-                let color = 'bg-gray-100 text-gray-800';
-                if(i.status === 'New') color = 'bg-red-100 text-red-800';
-                if(i.status === 'Working on it') color = 'bg-blue-100 text-blue-800';
-                if(i.status === 'Closed') color = 'bg-green-100 text-green-800';
-                
-                // Safe handling of description string
+                let color = i.status === 'New' ? 'bg-red-100 text-red-800' : i.status === 'Closed' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800';
                 const safeDesc = i.description ? i.description.replace(/"/g, '&quot;') : '';
 
                 tb.innerHTML += `
@@ -1171,89 +1191,65 @@
                         <td class="px-6 py-4 font-bold text-slate-700">${i.tool_name}<br><span class="text-xs font-normal text-slate-400">${i.tool_id}</span></td>
                         <td class="px-6 py-4"><div class="font-bold text-xs text-red-600 uppercase">${i.defect_type}</div><div class="text-sm text-slate-600 truncate max-w-xs">${i.description}</div></td>
                         <td class="px-6 py-4 text-sm">${i.reporter_name}</td>
-                        <td class="px-6 py-4 text-right">
-                            <button class="text-blue-600 font-bold hover:underline text-xs manage-issue-btn" 
-                                data-id="${i.id}" 
-                                data-status="${i.status}" 
-                                data-desc="${safeDesc}">
-                                Manage
-                            </button>
-                        </td>
+                        <td class="px-6 py-4 text-right"><button class="text-blue-600 font-bold hover:underline text-xs manage-issue-btn" data-id="${i.id}" data-status="${i.status}" data-desc="${safeDesc}">Manage</button></td>
                     </tr>`;
             });
-
-            // Attach listeners safely
-            document.querySelectorAll('.manage-issue-btn').forEach(btn => {
-                btn.onclick = (e) => {
-                    const el = e.target;
-                    manageCase(el.dataset.id, el.dataset.status, el.dataset.desc);
-                };
-            });
+            document.querySelectorAll('.manage-issue-btn').forEach(btn => btn.onclick = (e) => manageCase(e.target.dataset.id, e.target.dataset.status, e.target.dataset.desc));
         }
 
         function manageCase(id, status, desc) {
-            currentIssueId = id;
-            document.getElementById('modal-case-id').innerText = id;
-            document.getElementById('modal-desc').innerText = desc;
-            document.getElementById('modal-status').value = status;
-            toggleIssueCheck();
-            document.getElementById('issue-modal').style.display = 'flex';
+            currentIssueId = id; document.getElementById('modal-case-id').innerText = id; document.getElementById('modal-desc').innerText = desc;
+            document.getElementById('modal-status').value = status; toggleIssueCheck(); document.getElementById('issue-modal').style.display = 'flex';
         }
-
-        function toggleIssueCheck() { 
-            const val = document.getElementById('modal-status').value; 
-            document.getElementById('close-options').classList.toggle('hidden', val !== 'Closed'); 
-        }
-
+        function toggleIssueCheck() { document.getElementById('close-options').classList.toggle('hidden', document.getElementById('modal-status').value !== 'Closed'); }
         async function saveCaseStatus() { 
-            const status = document.getElementById('modal-status').value; 
-            const available = document.getElementById('make-available-cb').checked; 
-            await fetch(`/api/issues/${currentIssueId}/status`, {
-                method: 'PUT', 
-                headers: {'Content-Type':'application/json'}, 
-                body: JSON.stringify({status: status, make_tool_available: available})
-            }); 
-            document.getElementById('issue-modal').style.display = 'none'; 
-            loadIssues(); 
+            await fetch(`/api/issues/${currentIssueId}/status`, {method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({status: document.getElementById('modal-status').value, make_tool_available: document.getElementById('make-available-cb').checked})}); 
+            document.getElementById('issue-modal').style.display = 'none'; loadIssues(); 
         }
         
-        // AI Logic
+        // AI LOGIC (IMPROVED ERROR HANDLING)
         document.getElementById('ai-forecast-btn').onclick = async () => { 
-            const res = await fetch('/api/calibration/predict', {method:'POST'}); 
-            const data = await res.json(); 
-            currentProposals = data.proposals || []; 
-            if(currentProposals.length===0) return alert("No recommendations."); 
-            
-            document.getElementById('ai-proposal-body').innerHTML = currentProposals.map((p,i) => `
-                <tr class="hover:bg-purple-50">
-                    <td class="p-3"><input type="checkbox" class="ai-cb" checked data-index="${i}"></td>
-                    <td class="p-3 font-bold text-sm">${p.tool_name}</td>
-                    <td class="p-3 text-sm">${p.current_date}</td>
-                    <td class="p-3 font-bold text-purple-600 text-sm">${p.recommended_date}</td>
-                    <td class="p-3 text-sm italic">${p.reason}</td>
-                </tr>`).join(''); 
-            
             document.getElementById('ai-review-modal').style.display='flex'; 
+            document.getElementById('ai-loading-spinner').classList.remove('hidden');
+            document.getElementById('ai-table').classList.add('hidden');
+            
+            try {
+                const res = await fetch('/api/calibration/predict', {method:'POST'}); 
+                if(!res.ok) {
+                    throw new Error(`Server Error ${res.status}: Is the AI Module installed?`);
+                }
+                const data = await res.json(); 
+                currentProposals = data.proposals || []; 
+                
+                document.getElementById('ai-loading-spinner').classList.add('hidden');
+                document.getElementById('ai-table').classList.remove('hidden');
+
+                if(currentProposals.length===0) {
+                    document.getElementById('ai-proposal-body').innerHTML = '<tr><td colspan="5" class="p-8 text-center text-slate-500 italic">✅ System Optimal. No high-risk tools detected.</td></tr>';
+                    return;
+                }
+                
+                document.getElementById('ai-proposal-body').innerHTML = currentProposals.map((p,i) => `
+                    <tr class="hover:bg-purple-50">
+                        <td class="p-3"><input type="checkbox" class="ai-cb" checked data-index="${i}"></td>
+                        <td class="p-3 font-bold text-sm">${p.tool_name}</td>
+                        <td class="p-3 text-sm">${p.current_date}</td>
+                        <td class="p-3 font-bold text-purple-600 text-sm">${p.recommended_date}</td>
+                        <td class="p-3 text-sm italic">${p.reason}</td>
+                    </tr>`).join(''); 
+            } catch(e) {
+                alert("⚠️ AI System Error: " + e.message + "\n\nCheck if 'predictive_calibration.py' is in the server folder.");
+                document.getElementById('ai-review-modal').style.display='none'; 
+            }
         };
 
         document.getElementById('close-ai-modal').onclick = () => document.getElementById('ai-review-modal').style.display='none';
         document.getElementById('cancel-ai').onclick = () => document.getElementById('ai-review-modal').style.display='none';
         
         document.getElementById('approve-ai').onclick = async () => { 
-            const updates = Array.from(document.querySelectorAll('.ai-cb:checked')).map(cb => ({ 
-                tool_id: currentProposals[cb.dataset.index].tool_id, 
-                new_date: currentProposals[cb.dataset.index].recommended_date 
-            })); 
-            
-            await fetch('/api/calibration/apply', { 
-                method:'POST', 
-                headers:{'Content-Type':'application/json'}, 
-                body:JSON.stringify({updates})
-            }); 
-            
-            document.getElementById('ai-review-modal').style.display='none'; 
-            loadDashboard(); 
-            loadInventory(); 
+            const updates = Array.from(document.querySelectorAll('.ai-cb:checked')).map(cb => ({ tool_id: currentProposals[cb.dataset.index].tool_id, new_date: currentProposals[cb.dataset.index].recommended_date })); 
+            await fetch('/api/calibration/apply', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({updates})}); 
+            document.getElementById('ai-review-modal').style.display='none'; loadDashboard(); loadInventory(); 
         };
     </script>
 </body>
