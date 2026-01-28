@@ -297,6 +297,26 @@
             }
         }
 
+        setInterval(checkSessionHealth, 1000);
+
+        async function checkSessionHealth() {
+            // Only check if we are currently logged in
+            if (!currentUser) return; 
+
+            try {
+                const res = await fetch('/api/session/status');
+                const data = await res.json();
+
+                // If server says "Active: false", boot the user out
+                if (data.active === false) {
+                    console.log("🔒 Hardware session ended. Logging out...");
+                    logout(); // Your existing logout function
+                }
+            } catch (e) {
+                console.error("Session check failed", e);
+            }
+        }
+
         async function loadSimUsers() {
             try {
                 const users = await (await fetch('/api/users')).json();

@@ -3,6 +3,7 @@ from flask import Flask, render_template, jsonify, request
 import sqlite3
 import json
 import uuid
+import time
 from datetime import datetime, timedelta
 import requests
 
@@ -16,10 +17,8 @@ except ImportError:
 app = Flask(__name__)
 
 # --- GLOBAL STATE (NFC BRIDGE) ---
-latest_nfc_scan = {
-    "user_id": None,
-    "timestamp": 0
-}
+latest_nfc_scan = {}
+
 
 # --- DATABASE HELPER ---
 def get_db_connection():
@@ -62,48 +61,68 @@ def technician_station():
 # ==========================================
 
 @app.route('/api/nfc/scan', methods=['POST'])
-def receive_nfc_scan():
-    data = request.get_json()
-    card_uid = data.get('uid')
-    
-    if not card_uid:
-        return jsonify({'error': 'No UID provided'}), 400
-
-    # Store this scan GLOBALLY so the UI can find it
+def scan_nfc():
     global latest_nfc_scan
-    latest_nfc_scan['uid'] = card_uid
-    latest_nfc_scan['timestamp'] = datetime.now().timestamp()
-    latest_nfc_scan['type'] = 'unknown' # Default
+    data = request.get_json()
+    raw_uid = data.get('uid')
+
+    # 1. CRITICAL FIX: Save the ID immediately, even if we don't know who it is.
+    # This allows the "Add User" popup to see it.
+    latest_nfc_scan = {
+        'uid': raw_uid,
+        'timestamp': time.time()
+    }
 
     conn = get_db_connection()
     try:
-        # Check if it's a User
-        user = conn.execute('SELECT * FROM users WHERE nfc_id = ?', (card_uid,)).fetchone()
-        if user:
-            latest_nfc_scan['type'] = 'user'
-            latest_nfc_scan['id'] = user['id']
-            return jsonify({'message': 'User identified', 'user': user['name']})
+        # 2. Check if user exists (for Login purposes)
+        user = conn.execute('SELECT * FROM users WHERE nfc_id = ?', (raw_uid,)).fetchone()
         
-        # Check if it's an existing Tool
-        tool = conn.execute('SELECT * FROM tools WHERE nfc_id = ?', (card_uid,)).fetchone()
-        if tool:
-            latest_nfc_scan['type'] = 'tool'
-            latest_nfc_scan['id'] = tool['id']
-            return jsonify({'message': 'Tool identified', 'tool': tool['name']})
+        if user:
+            print(f"✅ NFC LOGIN: Authorized {user['name']}")
+            latest_nfc_scan['user_id'] = user['id']
+            latest_nfc_scan['name'] = user['name']
 
-        # If neither, it's a NEW TAG (Perfect for registration)
-        print(f"🆕 NEW TAG DISCOVERED: {card_uid}")
-        return jsonify({'message': 'New tag detected', 'uid': card_uid})
+            return jsonify({'status': 'authorized', 'user': user['name']}), 200
+        else:
+            print(f"⚠️ NEW CARD DETECTED: {raw_uid} (Not in DB)")
+            # We return 401 to the Pi (so it doesn't unlock the door), 
+            # but we ALREADY saved the ID above for the UI to grab.
+            return jsonify({'status': 'denied'}), 401
+            
+    except Exception as e:
+        print(f"NFC Error: {e}")
+        return jsonify({'error': str(e)}), 500
     finally:
         conn.close()
 
 @app.route('/api/nfc/poll', methods=['GET'])
-def poll_nfc_scan():
-    now = datetime.now().timestamp()
-    # Return scan if it happened in the last 5 seconds
-    if (now - latest_nfc_scan['timestamp'] < 5):
+def poll_nfc():
+    global latest_nfc_scan
+    # The UI calls this every second to see if a card was tapped
+    # We only return scans from the last 5 seconds to prevent "stale" data
+    if latest_nfc_scan and (time.time() - latest_nfc_scan.get('timestamp', 0) < 5):
         return jsonify(latest_nfc_scan)
-    return jsonify({'type': None})
+    return jsonify({})
+
+# --- SESSION MANAGEMENT ROUTES ---
+
+# 1. Pi calls this when the door locks
+@app.route('/api/session/end', methods=['POST'])
+def end_session():
+    global latest_nfc_scan
+    # We clear the latest scan so the UI knows the session is over
+    latest_nfc_scan = {} 
+    print("🔒 SESSION ENDED by Hardware")
+    return jsonify({'message': 'Session closed'})
+
+# 2. UI calls this to ask "Am I still allowed to be here?"
+@app.route('/api/session/status', methods=['GET'])
+def check_session_status():
+    global latest_nfc_scan
+    # If latest_nfc_scan is empty, it means no active session
+    is_active = bool(latest_nfc_scan)
+    return jsonify({'active': is_active})
 
 # ==========================================
 #           USER MANAGEMENT
@@ -415,43 +434,49 @@ def get_transactions():
 @app.route('/api/checkout', methods=['POST'])
 def checkout_tool():
     data = request.get_json()
-    user_id = data.get('user_id')
-    raw_id = data.get('tool_id') # This might be "DR-001" OR "0x04 0xa2..."
+    raw_user_id = data.get('user_id')  # This is likely "0x04 0xa2..."
+    raw_tool_id = data.get('tool_id')
     
     conn = get_db_connection()
     try:
-        # 1. TRANSLATION LAYER: Try to find tool by ID *OR* NFC_ID
-        tool = conn.execute('''
-            SELECT * FROM tools 
-            WHERE id = ? OR nfc_id = ?
-        ''', (raw_id, raw_id)).fetchone()
+        # --- 1. TRANSLATE USER NFC -> REAL USER ID ---
+        # We check if the incoming ID is a Card ID. If so, swap it for the User ID.
+        user_check = conn.execute('SELECT id FROM users WHERE nfc_id = ?', (raw_user_id,)).fetchone()
+        
+        # If we found a match, use the Real ID (e.g., "USR-001"). 
+        # If not, assume it's already a Real ID (fallback).
+        final_user_id = user_check['id'] if user_check else raw_user_id
 
+        # --- 2. TRANSLATE TOOL NFC -> REAL TOOL ID (You already have this) ---
+        tool = conn.execute('SELECT * FROM tools WHERE id = ? OR nfc_id = ?', (raw_tool_id, raw_tool_id)).fetchone()
+        
         if not tool:
-            print(f"❌ Checkout Failed: Tool '{raw_id}' not found in DB.")
             return jsonify({'message': 'Tool not found'}), 404
             
-        if tool['status'] != 'Available':
-            print(f"⚠️ Checkout Denied: {tool['name']} is {tool['status']}")
-            return jsonify({'message': f"Tool is {tool['status']}"}), 400
-
-        # 2. PERFORM CHECKOUT (Using the real ID from the database)
         real_tool_id = tool['id']
-        
+
+        # --- 3. PERFORM CHECKOUT WITH TRANSLATED IDs ---
         conn.execute('''
             UPDATE tools 
             SET status = "In Use", 
-                current_holder = ?, 
+                current_holder = ?,  -- Now using the correct "USR-001"
                 total_checkouts = total_checkouts + 1 
             WHERE id = ?
-        ''', (user_id, real_tool_id))
+        ''', (final_user_id, real_tool_id))
         
+        # Log Transaction
         conn.execute('INSERT INTO transactions (user_id, tool_id, type) VALUES (?, ?, "checkout")',
-                     (user_id, real_tool_id))
+                     (final_user_id, real_tool_id))
         
-        log_audit_event(user_id, 'TOOL_CHECKOUT', json.dumps({'tool_id': real_tool_id, 'nfc_used': raw_id}), conn=conn)
+        # Log Audit
+        log_audit_event(final_user_id, 'TOOL_CHECKOUT', json.dumps({'tool': tool['name']}), conn=conn)
+        
         conn.commit()
-        print(f"✅ SUCCESS: Checked out {tool['name']} to {user_id}")
-        return jsonify({'message': 'Checkout successful', 'tool': tool['name']})
+        return jsonify({'message': 'Checkout successful'})
+
+    except Exception as e:
+        print(f"Checkout Error: {e}")
+        return jsonify({'message': str(e)}), 500
     finally:
         conn.close()
 
